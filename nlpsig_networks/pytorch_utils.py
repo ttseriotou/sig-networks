@@ -7,10 +7,10 @@ import torch.nn as nn
 from sklearn import metrics
 from torch.optim.optimizer import Optimizer
 from torch.utils.data.dataloader import DataLoader
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from nlpsig.classification_utils import Folds, set_seed
-from nlpsig.focal_loss import ClassBalanced_FocalLoss, FocalLoss
+from nlpsig_networks.focal_loss import ClassBalanced_FocalLoss, FocalLoss
 
 
 def validation_pytorch(
@@ -81,10 +81,10 @@ def validation_pytorch(
 def training_pytorch(
     model: nn.Module,
     train_loader: DataLoader,
-    valid_loader: DataLoader,
     criterion: nn.Module,
     optimizer: Optimizer,
     num_epochs: int,
+    valid_loader: Optional[DataLoader] = None,
     seed: Optional[int] = 42,
     early_stopping: bool = False,
     patience: Optional[int] = 10,
@@ -103,7 +103,7 @@ def training_pytorch(
     train_loader : torch.utils.data.dataloader.DataLoader
         Training dataset as `torch.utils.data.dataloader.DataLoader` object
     valid_loader : torch.utils.data.dataloader.DataLoader
-        Validation dataset as `torch.utils.data.dataloader.DataLoader` object
+        Validation dataset as `torch.utils.data.dataloader.DataLoader` objectorc
     criterion : torch.nn.Module
         Loss function which inherits from the `torch.nn.Module` class
     optimizer : torch.optim.optimizer.Optimizer
@@ -162,22 +162,23 @@ def training_pytorch(
                 )
                 print("-" * 50)
         # determine whether or not to stop early using validation set
-        _, __, f1_v = validation_pytorch(
-            model=model,
-            valid_loader=valid_loader,
-            criterion=criterion,
-            epoch=epoch,
-            verbose=verbose,
-            verbose_epoch=verbose_epoch,
-        )
-        if early_stopping and (f1_v < last_metric):
-            trigger_times += 1
-            if trigger_times >= patience:
-                print(f"Early stopping at epoch {epoch+1}!")
-                break
-        else:
-            trigger_times = 0
-        last_metric = f1_v
+        if valid_loader is not None:
+            _, __, f1_v = validation_pytorch(
+                model=model,
+                valid_loader=valid_loader,
+                criterion=criterion,
+                epoch=epoch,
+                verbose=verbose,
+                verbose_epoch=verbose_epoch,
+            )
+            if early_stopping and (f1_v < last_metric):
+                trigger_times += 1
+                if trigger_times >= patience:
+                    print(f"Early stopping at epoch {epoch+1}!")
+                    break
+            else:
+                trigger_times = 0
+            last_metric = f1_v
 
     return model
 
