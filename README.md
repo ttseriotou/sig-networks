@@ -1,4 +1,4 @@
-# nlp_signature_networks
+# nlpsig-networks
 
 <p align="center">
 <img src="./fig/architecture_figure.png" alt="Model architecture">
