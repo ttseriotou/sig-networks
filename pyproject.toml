@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "nlp-signature-networks"
+version = "0.1.0"
+description = ""
+authors = [
+    "Ryan Chan <rchan@turing.ac.uk>",
+    "Talia Tseriotou <t.tseriotou@qmul.ac.uk>",
+    "Kasra Hosseini <khosseini@turing.ac.uk>"
+]
+readme = "README.md"
+packages = [{include = "nlp_signature_networks"}]
+
+[tool.poetry.dependencies]
+python = ">=3.8, <3.9"
+# nlpsig = { git = "https://github.com/datasig-ac-uk/nlpsig", branch = "develop" }
+torch = "1.9.0"
+signatory = "1.2.6.1.9.0"
+scikit-learn = "^1.2.2"
+pandas = "^1.5.3"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
