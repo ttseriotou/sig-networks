@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "nlp-signature-networks"
+name = "nlpsig-networks"
 version = "0.1.0"
 description = ""
 authors = [
