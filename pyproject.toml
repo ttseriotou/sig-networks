@@ -14,6 +14,7 @@ packages = [{include = "nlpsig_networks"}]
 python = ">=3.8, <3.9"
 # nlpsig = { git = "https://github.com/datasig-ac-uk/nlpsig", branch = "develop" }
 torch = "1.9.0"
+torchvision = "0.10.0"
 signatory = "1.2.6.1.9.0"
 scikit-learn = "^1.2.2"
 pandas = "^1.5.3"
