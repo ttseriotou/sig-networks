@@ -1,3 +1,4 @@
+from __future__ import annotations
 import signatory
 import torch
 import torch.nn as nn
@@ -15,13 +16,12 @@ class StackedDeepSigNet(nn.Module):
         num_time_features: int,
         embedding_dim: int,
         sig_depth: int,
-        hidden_dim_lstm: int,
-        hidden_dim: int,
+        hidden_dim_lstm: list[int] | tuple[int] | int,
+        hidden_dim_ffn: list[int] | tuple[int] | int,
         output_dim: int,
         dropout_rate: float,
         augmentation_type: str = "Conv1d",
         augmentation_layers: tuple = (),
-        blocks: int = 2,
         BiLSTM: bool = False,
         comb_method: str = "gated_addition",
     ):
@@ -40,10 +40,10 @@ class StackedDeepSigNet(nn.Module):
             Dimension of embedding to add to FFN input. If none, set to zero.
         sig_depth : int
             The depth to truncate the path signature at.
-        hidden_dim_lstm : tuple
-            Dimensions of the hidden layers in the LSTM.
-        hidden_dim : int
-            Dimension of the hidden layer in the FFN.
+        hidden_dim_lstm : list[int] | tuple[int] | int
+            Dimensions of the hidden layers in the LSTM blocks.
+        hidden_dim_ffn : list[int] | tuple[int] | int
+            Dimension of the hidden layers in the FFN.
         output_dim : int
             Dimension of the output layer in the FFN.
         dropout_rate : float
@@ -58,8 +58,6 @@ class StackedDeepSigNet(nn.Module):
             Passed into `Augment` class from `signatory` package if
             `augmentation_type='signatory'`, by default ().
             If provided, the last element of the tuple must equal `output_channels`.
-        blocks : int, optional
-            Number of blocks in LSTM, by default 2.
         BiLSTM : bool, optional
             Whether or not a birectional LSTM is used,
             by default False (unidirectional LSTM is used in this case).
@@ -72,8 +70,14 @@ class StackedDeepSigNet(nn.Module):
         """
         super(StackedDeepSigNet, self).__init__()
         self.input_channels = input_channels
-
-        self.blocks = blocks
+        
+        if type(hidden_dim_lstm) == int:
+            hidden_dim_lstm = [hidden_dim_lstm]
+        if type(hidden_dim_ffn) == int:
+            hidden_dim_ffn = [hidden_dim_ffn]
+        self.hidden_dim_lstm = hidden_dim_lstm
+        self.hidden_dim_ffn = hidden_dim_ffn
+        
         self.embedding_dim = embedding_dim
         self.num_time_features = num_time_features
         if comb_method not in ["concatenation", "gated_addition"]:
@@ -94,14 +98,14 @@ class StackedDeepSigNet(nn.Module):
             else:
                 self.augmentation_layers = augmentation_layers
 
-        # Convolution
+        # convolution
         self.conv = nn.Conv1d(
             in_channels=input_channels,
             out_channels=output_channels,
             kernel_size=3,
             stride=1,
             padding=1,
-        ).double()
+        )
         self.augment = signatory.Augment(
             in_channels=input_channels,
             layer_sizes=self.augmentation_layers,
@@ -110,46 +114,38 @@ class StackedDeepSigNet(nn.Module):
             padding=1,
             include_original=False,
             include_time=False,
-        ).double()
-        # Non-linearity
+        )
+        # non-linearity
         self.tanh1 = nn.Tanh()
 
-        # Signature with lift
-        self.signature1 = signatory.LogSignature(depth=sig_depth, stream=True)
-        input_dim_lstm = signatory.logsignature_channels(output_channels, sig_depth)
-
-        # additional blocks in the LSTM network
-        if self.blocks > 2:
-            self.lstm0 = nn.LSTM(
+        self.signature_layers = []
+        self.lstm_layers = []
+        for l in range(len(self.hidden_dim_lstm)):
+            self.signature_layers.append(signatory.LogSignature(depth=sig_depth, stream=True))
+            if l == 0:
+                input_dim_lstm = signatory.logsignature_channels(output_channels, sig_depth)
+            else:
+                input_dim_lstm = signatory.logsignature_channels(self.hidden_dim_lstm[l-1], sig_depth)
+            self.lstm_layers.append(nn.LSTM(
                 input_size=input_dim_lstm,
-                hidden_size=hidden_dim_lstm[-2],
+                hidden_size=self.hidden_dim_lstm[l],
                 num_layers=1,
                 batch_first=True,
-                bidirectional=False,
-            ).double()
-            self.signature1b = signatory.LogSignature(depth=sig_depth, stream=True)
-            input_dim_lstm = signatory.logsignature_channels(
-                in_channels=hidden_dim_lstm[-2], depth=sig_depth
-            )
+                bidirectional=False if l!=(len(self.hidden_dim_lstm)-1) else BiLSTM,
+            ))
+        
+        self.signature_layers = nn.ModuleList(self.signature_layers)
+        self.lstm_layers = nn.ModuleList(self.lstm_layers)
 
+        # signature without lift (for passing into FFN)
         mult = 2 if BiLSTM else 1
-        # LSTM
-        self.lstm = nn.LSTM(
-            input_size=input_dim_lstm,
-            hidden_size=hidden_dim_lstm[-1],
-            num_layers=1,
-            batch_first=True,
-            bidirectional=BiLSTM,
-        ).double()
-
-        # Signature without lift (for passing into FFN)
         self.signature2 = signatory.LogSignature(depth=sig_depth, stream=False)
 
         # find dimension of features to pass through FFN
         if self.comb_method == "concatenation":
             input_dim = (
                 signatory.logsignature_channels(
-                    in_channels=mult * hidden_dim_lstm[-1], depth=sig_depth
+                    in_channels=mult * self.hidden_dim_lstm[-1], depth=sig_depth
                 )
                 + self.num_time_features
                 + self.embedding_dim
@@ -158,7 +154,7 @@ class StackedDeepSigNet(nn.Module):
             input_dim = self.embedding_dim
             input_gated_linear = (
                 signatory.logsignature_channels(
-                    in_channels=mult * hidden_dim_lstm[-1], depth=sig_depth
+                    in_channels=mult * self.hidden_dim_lstm[-1], depth=sig_depth
                 )
                 + self.num_time_features
             )
@@ -168,27 +164,36 @@ class StackedDeepSigNet(nn.Module):
             else:
                 self.fc_scale = nn.Linear(input_gated_linear, input_gated_linear)
                 self.scaler = torch.nn.Parameter(torch.zeros(1, input_gated_linear))
-            # Non-linearity
+            # non-linearity
             self.tanh2 = nn.Tanh()
 
-        # Feed-forward Neural Network (FFN)
-        # Linear function
-        self.fc1 = nn.Linear(input_dim, hidden_dim)
-        # Non-linearity
-        self.relu1 = nn.ReLU()
-        # Dropout
+        # FNN: input layer
+        self.ffn_input_layer = nn.Linear(input_dim, self.hidden_dim_ffn[0])
+        self.relu = nn.ReLU()
         self.dropout = nn.Dropout(dropout_rate)
-        # Linear function 2:
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        # Non-linearity 2
-        self.relu2 = nn.ReLU()
-        # Linear function 3 (readout):
-        self.fc3 = nn.Linear(hidden_dim, output_dim)
+        input_dim = self.hidden_dim_ffn[0]
+        
+        # FNN: hidden layers
+        self.ffn_linear_layers = []
+        self.ffn_non_linear_layers = []
+        self.dropout_layers = []
+        for l in range(len(self.hidden_dim_ffn)):
+            self.ffn_linear_layers.append(nn.Linear(input_dim, self.hidden_dim_ffn[l]))
+            self.ffn_non_linear_layers.append(nn.ReLU())
+            self.dropout_layers.append(nn.Dropout(dropout_rate))
+            input_dim = self.hidden_dim_ffn[l]
+        
+        self.ffn_linear_layers = nn.ModuleList(self.ffn_linear_layers)
+        self.ffn_non_linear_layers = nn.ModuleList(self.ffn_non_linear_layers)
+        self.dropout_layers = nn.ModuleList(self.dropout_layers)
+        
+        # FNN: readout
+        self.ffn_final_layer = nn.Linear(input_dim, output_dim)
 
     def forward(self, x):
         # x has dimensions [batch, length of signal, channels]
 
-        # Convolution
+        # convolution
         if self.augmentation_type == "Conv1d":
             # input has dimensions [batch, length of signal, channels]
             # swap dimensions to get [batch, channels, length of signal]
@@ -206,23 +211,21 @@ class StackedDeepSigNet(nn.Module):
             # output has dimensions [batch, length of signal, channels]
             out = self.augment(x[:, :, : self.input_channels])
 
-        # Signature
-        out = self.signature1(out)
-        # if more blocks
-        if self.blocks > 2:
-            out, (_, _) = self.lstm0(out)
-            out = self.signature1b(out)
-        # LSTM
-        out, (_, _) = self.lstm(out)
-        # Signature
+        # take signature lifts and lstm
+        for l in range(len(self.hidden_dim_lstm)):
+            out = self.signature_layers[l](out)
+            out, _ = self.lstm_layers[l](out)
+        
+        # signature
         out = self.signature2(out)
 
-        # Combine Last Post Embedding
+        # combine last post embedding
         if x.shape[2] > self.input_channels:
             # we have things to concatenate to the path
             if self.comb_method == "concatenation":
                 if self.num_time_features > 0:
                     # concatenate any time features
+                    # take the maximum for the latest time
                     out = torch.cat(
                         (
                             out,
@@ -275,21 +278,18 @@ class StackedDeepSigNet(nn.Module):
                 else:
                     out = out_gated
 
-        # FFN: Linear function 1
-        out = self.fc1(out.float())
-        # Non-linearity 1
-        out = self.relu1(out)
-        # Dropout
+        # FFN: input layer
+        out = self.ffn_input_layer(out)
+        out = self.relu(out)
         out = self.dropout(out)
+        
+        # FFN: hidden layers    
+        for l in range(len(self.hidden_dim_ffn)):
+            out = self.ffn_linear_layers[l](out)
+            out = self.ffn_non_linear_layers[l](out)
+            out = self.dropout_layers[l](out)
 
-        # FFN: Linear function 2
-        out = self.fc2(out)
-        # Non-linearity 2
-        out = self.relu2(out)
-        # Dropout
-        out = self.dropout(out)
-
-        # FFN: Linear function 3 (readout)
-        out = self.fc3(out)
+        # FFN: readout
+        out = self.ffn_final_layer(out)
 
         return out
