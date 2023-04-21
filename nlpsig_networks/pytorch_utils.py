@@ -47,7 +47,6 @@ def validation_pytorch(
     """
     # sets the model to evaluation mode
     model.eval()
-    number_of_labels = 0
     total_loss = 0
     labels = torch.empty((0))
     predicted = torch.empty((0))
@@ -56,15 +55,13 @@ def validation_pytorch(
             # make prediction
             outputs = model(emb_v)
             _, predicted_v = torch.max(outputs.data, 1)
-            number_of_labels += labels_v.size(0)
             # compute loss
-            loss_v = criterion(outputs, labels_v)
-            total_loss += loss_v.item()
+            total_loss += criterion(outputs, labels_v).item()
             # save predictions and labels
             labels = torch.cat([labels, labels_v])
             predicted = torch.cat([predicted, predicted_v])
         # compute accuracy and f1 score
-        accuracy = ((predicted == labels).sum() / number_of_labels).item()
+        accuracy = ((predicted == labels).sum() / len(labels)).item()
         f1_v = metrics.f1_score(labels, predicted, average="macro")
         if verbose:
             if epoch % verbose_epoch == 0:
@@ -87,6 +84,7 @@ def training_pytorch(
     valid_loader: Optional[DataLoader] = None,
     seed: Optional[int] = 42,
     early_stopping: bool = False,
+    early_stopping_metric: str = "loss",
     patience: Optional[int] = 10,
     verbose: bool = False,
     verbose_epoch: int = 100,
@@ -130,15 +128,20 @@ def training_pytorch(
     torch.nn.Module
         Trained PyTorch model
     """
-    # sets the model to training mode
-    model.train()
+    if early_stopping and type(valid_loader) != DataLoader:
+        raise TypeError("if early stopping is required, need to pass in DataLoader object to `valid_loader`")
+
     set_seed(seed)
+
     # early stopping parameters
     last_metric = 0
     trigger_times = 0
+
     # model train & validation per epoch
     for epoch in tqdm(range(num_epochs)):
         for i, (emb, labels) in enumerate(train_loader):
+            # sets the model to training mode
+            model.train()
             # perform training by performing forward and backward passes
             optimizer.zero_grad()
             outputs = model(emb)
@@ -153,6 +156,7 @@ def training_pytorch(
                         + f"Item: {i}/{len(train_loader)} || "
                         + f"Loss: {loss.item()}"
                     )
+
         # show training progress
         if verbose:
             if epoch % verbose_epoch == 0:
@@ -161,9 +165,10 @@ def training_pytorch(
                     f"##### Epoch: {epoch+1}/{num_epochs} || " + f"Loss: {loss.item()}"
                 )
                 print("-" * 50)
+
         # determine whether or not to stop early using validation set
-        if valid_loader is not None:
-            _, __, f1_v = validation_pytorch(
+        if early_stopping:
+            loss_v, acc_v, f1_v = validation_pytorch(
                 model=model,
                 valid_loader=valid_loader,
                 criterion=criterion,
@@ -171,7 +176,13 @@ def training_pytorch(
                 verbose=verbose,
                 verbose_epoch=verbose_epoch,
             )
-            if early_stopping and (f1_v < last_metric):
+            if early_stopping_metric == "loss":
+                condition = loss_v > last_metric
+            elif early_stopping_metric == "accuracy":
+                condition = acc_v < last_metric
+            elif early_stopping_metric == "f1":
+                condition = f1_v < last_metric
+            if early_stopping and condition:
                 trigger_times += 1
                 if trigger_times >= patience:
                     print(f"Early stopping at epoch {epoch+1}!")
@@ -184,7 +195,7 @@ def training_pytorch(
 
 
 def testing_pytorch(
-    model: nn.Module, test_loader: DataLoader
+    model: nn.Module, test_loader: DataLoader, criterion: nn.Module,
 ) -> Tuple[torch.tensor, torch.tensor]:
     """
     Evaluates the PyTorch model to a validation set and
@@ -196,6 +207,8 @@ def testing_pytorch(
         PyTorch model which inherits from the `torch.nn.Module` class
     test_loader : DataLoader
         Testing dataset as `torch.utils.data.dataloader.DataLoader` object
+    criterion : torch.nn.Module
+        Loss function which inherits from the `torch.nn.Module` class
 
     Returns
     -------
@@ -204,23 +217,28 @@ def testing_pytorch(
     """
     # sets the model to evaluation mode
     model.eval()
-    labels_all = torch.empty((0))
-    predicted_all = torch.empty((0))
+    total_loss = 0
+    labels = torch.empty((0))
+    predicted = torch.empty((0))
     with torch.no_grad():
         # Iterate through test dataset
         for emb_t, labels_t in test_loader:
             # make prediction
             outputs_t = model(emb_t)
             _, predicted_t = torch.max(outputs_t.data, 1)
+            # compute loss
+            total_loss += criterion(outputs_t, labels_t).item()
             # save predictions and labels
-            labels_all = torch.cat([labels_all, labels_t])
-            predicted_all = torch.cat([predicted_all, predicted_t])
+            labels = torch.cat([labels, labels_t])
+            predicted = torch.cat([predicted, predicted_t])
+            
 
     print(
-        f"Accuracy on dataset of size {len(labels_all)}: "
-        f"{100 * sum(labels_all==predicted_all) / len(labels_all)} %."
+        f"Accuracy on dataset of size {len(labels)}: "
+        f"{100 * sum(labels==predicted) / len(labels)} %."
     )
-    return predicted_all, labels_all
+    print(f"Average loss: {total_loss / len(test_loader)}")
+    return predicted, labels
 
 
 def KFold_pytorch(
@@ -319,7 +337,7 @@ def KFold_pytorch(
         predicted, labels = testing_pytorch(model=model, test_loader=test)
 
         # evaluate model
-        accuracy.append(((predicted == labels).sum() / labels.size(0)).item())
+        accuracy.append(((predicted == labels).sum() / len(labels)).item())
         f1_score.append(metrics.f1_score(labels, predicted, average="macro"))
 
     # remove starting state pickle file
