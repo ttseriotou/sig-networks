@@ -1,6 +1,7 @@
 import os
 from typing import Optional, Tuple
 
+import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -11,6 +12,37 @@ from tqdm.auto import tqdm
 
 from nlpsig.classification_utils import Folds, set_seed
 from nlpsig_networks.focal_loss import ClassBalanced_FocalLoss, FocalLoss
+
+
+class EarlyStopper:
+    def __init__(self, metric: str, patience: int = 1, min_delta: float = 0.0):
+        if metric not in ["loss", "accuracy", "f1"]:
+            raise ValueError("metric must be either 'loss', 'accuracy' or 'f1'. ")
+        self.metric = metric
+        self.patience = patience
+        self.min_delta = min_delta
+        self.counter = 0
+        self.min_validation = np.inf
+        self.max_validation = -np.inf
+
+    def early_stop(self, validation_metric: float) -> bool:
+        if self.metric == "loss":
+            if validation_metric < self.min_validation:
+                self.min_validation = validation_metric
+                self.counter = 0
+            elif validation_metric > (self.min_validation + self.min_delta):
+                self.counter += 1
+                if self.counter >= self.patience:
+                    return True
+        elif self.metric in ["accuracy", "f1"]:
+            if validation_metric > self.max_validation:
+                self.max_validation = validation_metric
+                self.counter = 0
+            elif validation_metric < (self.max_validation - self.min_delta):
+                self.counter += 1
+                if self.counter >= self.patience:
+                    return True
+        return False
 
 
 def validation_pytorch(
@@ -66,7 +98,7 @@ def validation_pytorch(
         if verbose:
             if epoch % verbose_epoch == 0:
                 print(
-                    f"Epoch: {epoch+1} || "
+                    f"Validation || Epoch: {epoch+1} || "
                     + f"Loss: {total_loss / len(valid_loader)} || "
                     + f"Accuracy: {accuracy} || "
                     + f"F1-score: {f1_v}"
@@ -134,8 +166,10 @@ def training_pytorch(
     set_seed(seed)
 
     # early stopping parameters
-    last_metric = 0
-    trigger_times = 0
+    if early_stopping:
+        early_stopper = EarlyStopper(metric=early_stopping_metric,
+                                     patience=patience,
+                                     min_delta=0)
 
     # model train & validation per epoch
     for epoch in tqdm(range(num_epochs)):
@@ -177,19 +211,14 @@ def training_pytorch(
                 verbose_epoch=verbose_epoch,
             )
             if early_stopping_metric == "loss":
-                condition = loss_v > last_metric
+                validation_metric = loss_v
             elif early_stopping_metric == "accuracy":
-                condition = acc_v < last_metric
+                validation_metric = acc_v
             elif early_stopping_metric == "f1":
-                condition = f1_v < last_metric
-            if early_stopping and condition:
-                trigger_times += 1
-                if trigger_times >= patience:
-                    print(f"Early stopping at epoch {epoch+1}!")
-                    break
-            else:
-                trigger_times = 0
-            last_metric = f1_v
+                validation_metric = f1_v
+            if early_stopper.early_stop(validation_metric):
+                print(f"Early stopping at epoch {epoch+1}!")
+                break
 
     return model
 

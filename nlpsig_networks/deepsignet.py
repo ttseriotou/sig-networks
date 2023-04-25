@@ -190,7 +190,7 @@ class StackedDeepSigNet(nn.Module):
         # FNN: readout
         self.ffn_final_layer = nn.Linear(input_dim, output_dim)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         # x has dimensions [batch, length of signal, channels]
 
         # convolution
