@@ -167,13 +167,13 @@ class StackedDeepSigNet(nn.Module):
             # non-linearity
             self.tanh2 = nn.Tanh()
 
-        # FNN: input layer
+        # FFN: input layer
         self.ffn_input_layer = nn.Linear(input_dim, self.hidden_dim_ffn[0])
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(dropout_rate)
         input_dim = self.hidden_dim_ffn[0]
         
-        # FNN: hidden layers
+        # FFN: hidden layers
         self.ffn_linear_layers = []
         self.ffn_non_linear_layers = []
         self.dropout_layers = []
@@ -187,7 +187,7 @@ class StackedDeepSigNet(nn.Module):
         self.ffn_non_linear_layers = nn.ModuleList(self.ffn_non_linear_layers)
         self.dropout_layers = nn.ModuleList(self.dropout_layers)
         
-        # FNN: readout
+        # FFN: readout
         self.ffn_final_layer = nn.Linear(input_dim, output_dim)
 
     def forward(self, x: torch.Tensor):

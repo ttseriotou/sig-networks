@@ -11,7 +11,7 @@ class FeedforwardNeuralNetModel(nn.Module):
     def __init__(
         self,
         input_dim: int,
-        hidden_dim_ffn: list[int] | tuple[int] | int,
+        hidden_dim: list[int] | tuple[int] | int,
         output_dim: int,
         dropout_rate: float
     ):
@@ -22,7 +22,7 @@ class FeedforwardNeuralNetModel(nn.Module):
         ----------
         input_dim : int
             Dimension of input layer.
-        hidden_dim_ffn : list[int] | tuple[int] | int
+        hidden_dim : list[int] | tuple[int] | int
             Dimension of the hidden layers in the FFN.
         output_dim : int
             Dimension of output layer.
@@ -30,46 +30,46 @@ class FeedforwardNeuralNetModel(nn.Module):
             Probability of dropout.
         """
         super(FeedforwardNeuralNetModel, self).__init__()
-        if type(hidden_dim_ffn) == int:
-            hidden_dim_ffn = [hidden_dim_ffn]
-        self.hidden_dim_ffn = hidden_dim_ffn
+        if type(hidden_dim) == int:
+            hidden_dim = [hidden_dim]
+        self.hidden_dim = hidden_dim
         
-        # FNN: input layer
-        self.ffn_input_layer = nn.Linear(input_dim, self.hidden_dim_ffn[0])
+        # FFN: input layer
+        self.input_layer = nn.Linear(input_dim, self.hidden_dim[0])
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(dropout_rate)
-        input_dim = self.hidden_dim_ffn[0]
+        input_dim = self.hidden_dim[0]
         
-        # FNN: hidden layers
-        self.ffn_linear_layers = []
-        self.ffn_non_linear_layers = []
+        # FFN: hidden layers
+        self.linear_layers = []
+        self.non_linear_layers = []
         self.dropout_layers = []
-        for l in range(len(self.hidden_dim_ffn)):
-            self.ffn_linear_layers.append(nn.Linear(input_dim, self.hidden_dim_ffn[l]))
-            self.ffn_non_linear_layers.append(nn.ReLU())
+        for l in range(len(self.hidden_dim)):
+            self.linear_layers.append(nn.Linear(input_dim, self.hidden_dim[l]))
+            self.non_linear_layers.append(nn.ReLU())
             self.dropout_layers.append(nn.Dropout(dropout_rate))
-            input_dim = self.hidden_dim_ffn[l]
+            input_dim = self.hidden_dim[l]
         
-        self.ffn_linear_layers = nn.ModuleList(self.ffn_linear_layers)
-        self.ffn_non_linear_layers = nn.ModuleList(self.ffn_non_linear_layers)
+        self.linear_layers = nn.ModuleList(self.linear_layers)
+        self.non_linear_layers = nn.ModuleList(self.non_linear_layers)
         self.dropout_layers = nn.ModuleList(self.dropout_layers)
         
-        # FNN: readout
-        self.ffn_final_layer = nn.Linear(input_dim, output_dim)
+        # FFN: readout
+        self.final_layer = nn.Linear(input_dim, output_dim)
 
     def forward(self, x: torch.Tensor):
         # FFN: input layer
-        out = self.ffn_input_layer(x)
+        out = self.input_layer(x)
         out = self.relu(out)
         out = self.dropout(out)
         
         # FFN: hidden layers    
-        for l in range(len(self.hidden_dim_ffn)):
-            out = self.ffn_linear_layers[l](out)
-            out = self.ffn_non_linear_layers[l](out)
+        for l in range(len(self.hidden_dim)):
+            out = self.linear_layers[l](out)
+            out = self.non_linear_layers[l](out)
             out = self.dropout_layers[l](out)
 
         # FFN: readout
-        out = self.ffn_final_layer(out)
+        out = self.final_layer(out)
 
         return out

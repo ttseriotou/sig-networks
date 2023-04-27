@@ -8,6 +8,7 @@ import torch.nn as nn
 from sklearn import metrics
 from torch.optim.optimizer import Optimizer
 from torch.utils.data.dataloader import DataLoader
+from torch.optim.lr_scheduler import _LRScheduler, ReduceLROnPlateau
 from tqdm.auto import tqdm
 
 from nlpsig.classification_utils import Folds, set_seed
@@ -113,6 +114,7 @@ def training_pytorch(
     criterion: nn.Module,
     optimizer: Optimizer,
     num_epochs: int,
+    scheduler: Optional[_LRScheduler] = None,
     valid_loader: Optional[DataLoader] = None,
     seed: Optional[int] = 42,
     early_stopping: bool = False,
@@ -133,13 +135,15 @@ def training_pytorch(
     train_loader : torch.utils.data.dataloader.DataLoader
         Training dataset as `torch.utils.data.dataloader.DataLoader` object
     valid_loader : torch.utils.data.dataloader.DataLoader
-        Validation dataset as `torch.utils.data.dataloader.DataLoader` objectorc
+        Validation dataset as `torch.utils.data.dataloader.DataLoader` object
     criterion : torch.nn.Module
         Loss function which inherits from the `torch.nn.Module` class
     optimizer : torch.optim.optimizer.Optimizer
         PyTorch Optimizer
     num_epochs : int
         Number of epochs
+    scheduler : Optional[_LRScheduler], optional
+        Learning rate scheduler
     seed : Optional[int], optional
         Seed number, by default 42
     early_stopping: bool, optional
@@ -210,6 +214,8 @@ def training_pytorch(
                 verbose=verbose,
                 verbose_epoch=verbose_epoch,
             )
+            if isinstance(scheduler, ReduceLROnPlateau):
+                scheduler.step(loss_v)
             if early_stopping_metric == "loss":
                 validation_metric = loss_v
             elif early_stopping_metric == "accuracy":
@@ -219,6 +225,9 @@ def training_pytorch(
             if early_stopper.early_stop(validation_metric):
                 print(f"Early stopping at epoch {epoch+1}!")
                 break
+        
+        if (scheduler is not None) and (not isinstance(scheduler, ReduceLROnPlateau)):
+            scheduler.step()
 
     return model
 
