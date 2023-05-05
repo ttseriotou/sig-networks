@@ -31,7 +31,7 @@ class EarlyStopper:
             if validation_metric < self.min_validation:
                 self.min_validation = validation_metric
                 self.counter = 0
-            elif validation_metric > (self.min_validation + self.min_delta):
+            elif validation_metric >= (self.min_validation + self.min_delta):
                 self.counter += 1
                 if self.counter >= self.patience:
                     return True
@@ -39,7 +39,7 @@ class EarlyStopper:
             if validation_metric > self.max_validation:
                 self.max_validation = validation_metric
                 self.counter = 0
-            elif validation_metric < (self.max_validation - self.min_delta):
+            elif validation_metric <= (self.max_validation - self.min_delta):
                 self.counter += 1
                 if self.counter >= self.patience:
                     return True

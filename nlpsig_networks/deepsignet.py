@@ -16,12 +16,13 @@ class StackedDeepSigNet(nn.Module):
         num_time_features: int,
         embedding_dim: int,
         sig_depth: int,
-        hidden_dim_lstm: list[int] | tuple[int] | int,
-        hidden_dim_ffn: list[int] | tuple[int] | int,
+        hidden_dim_lstm: list[int] | int,
+        hidden_dim_ffn: list[int] | int,
         output_dim: int,
         dropout_rate: float,
         augmentation_type: str = "Conv1d",
-        augmentation_layers: tuple = (),
+        augmentation_args: dict | None = None,
+        hidden_dim_aug: list[int] | int | None = None,
         BiLSTM: bool = False,
         comb_method: str = "gated_addition",
     ):
@@ -40,9 +41,9 @@ class StackedDeepSigNet(nn.Module):
             Dimension of embedding to add to FFN input. If none, set to zero.
         sig_depth : int
             The depth to truncate the path signature at.
-        hidden_dim_lstm : list[int] | tuple[int] | int
+        hidden_dim_lstm : list[int] | int
             Dimensions of the hidden layers in the LSTM blocks.
-        hidden_dim_ffn : list[int] | tuple[int] | int
+        hidden_dim_ffn : list[int] | int
             Dimension of the hidden layers in the FFN.
         output_dim : int
             Dimension of the output layer in the FFN.
@@ -52,12 +53,14 @@ class StackedDeepSigNet(nn.Module):
             Method of augmenting the path, by default "Conv1d".
             Options are:
             - "Conv1d": passes path through 1D convolution layer.
-            - "signatory": passes path through `Augment` layer from
-            `signatory` package.
-        augmentation_layers : tuple, optional
+            - "signatory": passes path through `Augment` layer from `signatory` package.
+        augmentation_args : dict | None, optional
+            Arguments to pass into `torch.Conv1d` or `signatory.Augment`, by default None.
+            If None, by default will set `kernel_size=3`, `stride=1`, `padding=0`.
+        hidden_dim_aug : list[int] | int | None
+            Dimensions of the hidden layers in the augmentation layer.
             Passed into `Augment` class from `signatory` package if
-            `augmentation_type='signatory'`, by default ().
-            If provided, the last element of the tuple must equal `output_channels`.
+            `augmentation_type='signatory'`, by default None.
         BiLSTM : bool, optional
             Whether or not a birectional LSTM is used,
             by default False (unidirectional LSTM is used in this case).
@@ -71,9 +74,9 @@ class StackedDeepSigNet(nn.Module):
         super(StackedDeepSigNet, self).__init__()
         self.input_channels = input_channels
         
-        if type(hidden_dim_lstm) == int:
+        if isinstance(hidden_dim_lstm, int):
             hidden_dim_lstm = [hidden_dim_lstm]
-        if type(hidden_dim_ffn) == int:
+        if isinstance(hidden_dim_ffn, int):
             hidden_dim_ffn = [hidden_dim_ffn]
         self.hidden_dim_lstm = hidden_dim_lstm
         self.hidden_dim_ffn = hidden_dim_ffn
@@ -87,33 +90,29 @@ class StackedDeepSigNet(nn.Module):
         self.comb_method = comb_method
         if augmentation_type not in ["Conv1d", "signatory"]:
             raise ValueError("`augmentation_type` must be 'Conv1d' or 'signatory'.")
+        
         self.augmentation_type = augmentation_type
-        if augmentation_layers == ():
-            self.augmentation_layers = output_channels
-        elif len(augmentation_layers) > 0:
-            if augmentation_layers[-1] != output_channels:
-                raise ValueError(
-                    "Last element of augmentation_layers must equal output_channels"
-                )
-            else:
-                self.augmentation_layers = augmentation_layers
-
+        if isinstance(hidden_dim_aug, int):
+            hidden_dim_aug = [hidden_dim_aug]
+        elif hidden_dim_aug is None:
+            hidden_dim_aug = []
+        self.hidden_dim_aug = hidden_dim_aug
+        if augmentation_args is None:
+            augmentation_args = {"kernel_size": 3,
+                                 "stride": 1,
+                                 "padding": 0}
         # convolution
         self.conv = nn.Conv1d(
             in_channels=input_channels,
             out_channels=output_channels,
-            kernel_size=3,
-            stride=1,
-            padding=1,
+            **augmentation_args,
         )
         self.augment = signatory.Augment(
             in_channels=input_channels,
-            layer_sizes=self.augmentation_layers,
-            kernel_size=3,
-            stride=1,
-            padding=1,
+            layer_sizes=self.hidden_dim_aug + [output_channels],
             include_original=False,
             include_time=False,
+            **augmentation_args,
         )
         # non-linearity
         self.tanh1 = nn.Tanh()
