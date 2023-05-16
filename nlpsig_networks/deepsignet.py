@@ -100,7 +100,7 @@ class StackedDeepSigNet(nn.Module):
         if augmentation_args is None:
             augmentation_args = {"kernel_size": 3,
                                  "stride": 1,
-                                 "padding": 0}
+                                 "padding": 1}
         # convolution
         self.conv = nn.Conv1d(
             in_channels=input_channels,
