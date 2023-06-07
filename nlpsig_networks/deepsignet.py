@@ -15,6 +15,7 @@ class StackedDeepSigNet(nn.Module):
         output_channels: int,
         num_time_features: int,
         embedding_dim: int,
+        log_signature: bool,
         sig_depth: int,
         hidden_dim_lstm: list[int] | int,
         hidden_dim_ffn: list[int] | int,
@@ -116,15 +117,28 @@ class StackedDeepSigNet(nn.Module):
         )
         # non-linearity
         self.tanh1 = nn.Tanh()
-
+        
+        self.log_signature = log_signature
         self.signature_layers = []
         self.lstm_layers = []
         for l in range(len(self.hidden_dim_lstm)):
-            self.signature_layers.append(signatory.LogSignature(depth=sig_depth, stream=True))
-            if l == 0:
-                input_dim_lstm = signatory.logsignature_channels(output_channels, sig_depth)
+            if self.log_signature:    
+                self.signature_layers.append(signatory.LogSignature(depth=sig_depth, stream=True))
+                if l == 0:
+                    input_dim_lstm = signatory.logsignature_channels(in_channels=output_channels,
+                                                                     depth=sig_depth)
+                else:
+                    input_dim_lstm = signatory.logsignature_channels(in_channels=self.hidden_dim_lstm[l-1],
+                                                                     depth=sig_depth)
             else:
-                input_dim_lstm = signatory.logsignature_channels(self.hidden_dim_lstm[l-1], sig_depth)
+                self.signature_layers.append(signatory.Signature(depth=sig_depth, stream=True))
+                if l == 0:
+                    input_dim_lstm = signatory.signature_channels(channels=output_channels,
+                                                                  depth=sig_depth)
+                else:
+                    input_dim_lstm = signatory.signature_channels(channels=self.hidden_dim_lstm[l-1],
+                                                                  depth=sig_depth)
+            
             self.lstm_layers.append(nn.LSTM(
                 input_size=input_dim_lstm,
                 hidden_size=self.hidden_dim_lstm[l],
@@ -138,23 +152,28 @@ class StackedDeepSigNet(nn.Module):
 
         # signature without lift (for passing into FFN)
         mult = 2 if BiLSTM else 1
-        self.signature2 = signatory.LogSignature(depth=sig_depth, stream=False)
-
+        if self.log_signature:
+            self.signature2 = signatory.LogSignature(depth=sig_depth, stream=False)
+            signature_output_channels = signatory.logsignature_channels(
+                in_channels=mult * self.hidden_dim_lstm[-1], depth=sig_depth
+            )
+        else:
+            self.signature2 = signatory.Signature(depth=sig_depth, stream=False)
+            signature_output_channels = signatory.signature_channels(
+                channels=mult * self.hidden_dim_lstm[-1], depth=sig_depth
+            )
+        
         # find dimension of features to pass through FFN
         if self.comb_method == "concatenation":
             input_dim = (
-                signatory.logsignature_channels(
-                    in_channels=mult * self.hidden_dim_lstm[-1], depth=sig_depth
-                )
+                signature_output_channels
                 + self.num_time_features
                 + self.embedding_dim
             )
         elif self.comb_method == "gated_addition":
             input_dim = self.embedding_dim
             input_gated_linear = (
-                signatory.logsignature_channels(
-                    in_channels=mult * self.hidden_dim_lstm[-1], depth=sig_depth
-                )
+                signature_output_channels
                 + self.num_time_features
             )
             if self.embedding_dim > 0:
