@@ -430,7 +430,6 @@ def KFold_pytorch(
     num_epochs: int,
     seed: Optional[int] = 42,
     save_best: bool = False,
-    output: str = "best_model.pkl",
     early_stopping: bool = False,
     patience: Optional[int] = 10,
     verbose: bool = False,
@@ -516,7 +515,6 @@ def KFold_pytorch(
             num_epochs=num_epochs,
             seed=seed,
             save_best=save_best,
-            output=output.replace(".pkl", f"_{fold}.pkl"),
             early_stopping=early_stopping,
             patience=patience,
             verbose=verbose,
@@ -553,6 +551,11 @@ def KFold_pytorch(
 
     # remove starting state pickle file
     os.remove("starting_state.pkl")
+    # if save_best=True, it will save models in best_model.pkl by default
+    # so we remove
+    if os.path.exists("best_model.pkl"):
+        os.remove("best_model.pkl")
+        
     return pd.DataFrame({"loss": loss,
                          "accuracy": accuracy, 
                          "f1": f1,

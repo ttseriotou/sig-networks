@@ -143,7 +143,6 @@ def implement_ffn(
                                 num_epochs=num_epochs,
                                 seed=seed,
                                 save_best=save_best,
-                                output=model_output,
                                 early_stopping=early_stopping,
                                 patience=patience,
                                 verbose=verbose_training)
@@ -211,7 +210,8 @@ def implement_ffn(
             print(results)
         
     # remove any models that have been saved
-    os.remove(model_output)
+    if os.path.exists(model_output):
+        os.remove(model_output)
     
     return ffn_model, results
 
@@ -412,7 +412,8 @@ def ffn_hyperparameter_search(
         test_results_df.to_csv(best_results_output)
     
     # remove any models that have been saved
-    os.remove(model_output)
+    if os.path.exists(model_output):
+        os.remove(model_output)
     
     return results_df, test_results_df, save_best_model.best_valid_metric, checkpoint["extra_info"]
 
@@ -563,7 +564,7 @@ def histories_baseline_hyperparameter_search(
     model_output = "best_ffn_history_model.pkl"
     best_model = SaveBestModel(metric=validation_metric,
                                output=model_output,
-                               verbose=True)
+                               verbose=verbose)
     
     results_df = pd.DataFrame()
     model_id = 0
@@ -725,7 +726,7 @@ def histories_baseline_hyperparameter_search(
                                         verbose_results=False)
         
         test_results["hidden_dim"] = [checkpoint["extra_info"]["hidden_dim"]
-                                      for _ in range(len(results.index))]
+                                      for _ in range(len(test_results.index))]
         test_results["dropout_rate"] = checkpoint["extra_info"]["dropout_rate"]
         test_results["learning_rate"] = checkpoint["extra_info"]["learning_rate"]
         test_results["seed"] = seed
@@ -763,6 +764,7 @@ def histories_baseline_hyperparameter_search(
         test_results_df.to_csv(best_results_output)
             
     # remove any models that have been saved
-    os.remove(model_output)
+    if os.path.exists(model_output):
+        os.remove(model_output)
         
     return results_df, test_results_df, best_model.best_valid_metric, checkpoint["extra_info"]

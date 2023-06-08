@@ -160,7 +160,6 @@ def implement_sdsn(
                                 num_epochs=num_epochs,
                                 seed=seed,
                                 save_best=save_best,
-                                output=model_output,
                                 early_stopping=early_stopping,
                                 validation_metric=validation_metric,
                                 patience=patience,
@@ -228,7 +227,8 @@ def implement_sdsn(
             print(results)
             
     # remove any models that have been saved
-    os.remove(model_output)
+    if os.path.exists(model_output):
+        os.remove(model_output)
         
     return sdsn_model, results
 
@@ -274,7 +274,7 @@ def sdsn_hyperparameter_search(
     model_output = "best_sdsn_model.pkl",
     save_best_model = SaveBestModel(metric=validation_metric,
                                     output=model_output,
-                                    verbose=True)
+                                    verbose=verbose)
     
     results_df = pd.DataFrame()
     model_id = 0
@@ -466,9 +466,9 @@ def sdsn_hyperparameter_search(
         test_results["embedding_dim"] = embedding_dim
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
         test_results["lstm_hidden_dim"] = [checkpoint["extra_info"]["lstm_hidden_dim"]
-                                           for _ in range(len(results.index))]
+                                           for _ in range(len(test_results.index))]
         test_results["ffn_hidden_dim"] = [checkpoint["extra_info"]["ffn_hidden_dim"]
-                                          for _ in range(len(results.index))]
+                                          for _ in range(len(test_results.index))]
         test_results["dropout_rate"] = checkpoint["extra_info"]["dropout_rate"]
         test_results["learning_rate"] = checkpoint["extra_info"]["learning_rate"]
         test_results["seed"] = seed
@@ -492,6 +492,7 @@ def sdsn_hyperparameter_search(
         results_df.to_csv(results_output)
     
     # remove any models that have been saved
-    os.remove(model_output)
+    if os.path.exists(model_output):
+        os.remove(model_output)
     
     return results_df, test_results_df, save_best_model.best_valid_metric, checkpoint["extra_info"]
