@@ -288,14 +288,16 @@ def sdsn_hyperparameter_search(
                 print("\n" + "#" * 50)
                 print(f"dimension: {dimension} | "
                       f"method: {method}")
-                x_data, input_channels = obtain_SDSN_input(method=method,
-                                                           dimension=dimension,
-                                                           df=df,
-                                                           id_column=id_column,
-                                                           label_column=label_column,
-                                                           embeddings=embeddings,
-                                                           k=k,
-                                                           path_indices=path_indices)
+                x_data, input_channels = obtain_SDSN_input(
+                    method=method,
+                    dimension=dimension,
+                    df=df,
+                    id_column=id_column,
+                    label_column=label_column,
+                    embeddings=embeddings,
+                    k=k,
+                    path_indices=path_indices
+                )
         
                 for lstm_hidden_dim in tqdm(lstm_hidden_dim_sizes):
                     for ffn_hidden_dim in tqdm(ffn_hidden_dim_sizes):
@@ -306,11 +308,11 @@ def sdsn_hyperparameter_search(
                                         if verbose:
                                             print("\n" + "!" * 50)
                                             print(f"lstm_hidden_dim: {lstm_hidden_dim} | "
-                                                f"ffn_hidden_dim: {ffn_hidden_dim} | "
-                                                f"sig_depth: {sig_depth} | "
-                                                f"output_channels: {output_channels} | "
-                                                f"dropout: {dropout} | "
-                                                f"learning_rate: {lr}")
+                                                  f"ffn_hidden_dim: {ffn_hidden_dim} | "
+                                                  f"sig_depth: {sig_depth} | "
+                                                  f"output_channels: {output_channels} | "
+                                                  f"dropout: {dropout} | "
+                                                  f"learning_rate: {lr}")
                                         scores = []
                                         verbose_model = verbose
                                         for seed in seeds:

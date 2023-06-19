@@ -159,7 +159,7 @@ def implement_ffn(
         # define loss
         if loss == "focal":
             criterion = FocalLoss(gamma = gamma)
-            y_train = split_data.get_splits(as_DataLoader=False)[5]
+            y_train = split_data.get_splits(as_DataLoader=False)[1]
             criterion.set_alpha_from_y(y=y_train)
         elif loss == "cross_entropy":
             criterion = torch.nn.CrossEntropyLoss()

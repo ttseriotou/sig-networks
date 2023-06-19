@@ -14,7 +14,6 @@ from tqdm.auto import tqdm
 
 from nlpsig.classification_utils import Folds, set_seed
 from nlpsig_networks.focal_loss import ClassBalanced_FocalLoss, FocalLoss
-from sklearn import metrics
 
 
 class EarlyStopper:
@@ -496,10 +495,10 @@ def KFold_pytorch(
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         criterion = checkpoint["criterion"]
         if isinstance(criterion, FocalLoss):
-            y_train = folds.get_splits(fold_index=fold)[5]
+            y_train = folds.get_splits(fold_index=fold)[1]
             criterion.set_alpha_from_y(y=y_train)
         elif isinstance(criterion, ClassBalanced_FocalLoss):
-            y_train = folds.get_splits(fold_index=fold)[5]
+            y_train = folds.get_splits(fold_index=fold)[1]
             criterion.set_samples_per_cls_from_y(y=y_train)
 
         # obtain test, valid and test dataloaders
