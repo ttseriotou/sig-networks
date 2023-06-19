@@ -3,7 +3,7 @@ from __future__ import annotations
 import nlpsig
 from nlpsig.classification_utils import DataSplits, Folds
 from nlpsig_networks.pytorch_utils import SaveBestModel, training_pytorch, testing_pytorch, set_seed, KFold_pytorch
-from nlpsig_networks.deepsignet import StackedDeepSigNet
+from nlpsig_networks.snwu_network import SWNUNetwork
 from nlpsig_networks.focal_loss import FocalLoss
 import torch
 import numpy as np
@@ -91,7 +91,7 @@ def implement_sdsn(
     verbose_training: bool = True,
     verbose_results: bool = True,
     verbose_model: bool = False,
-) -> tuple[StackedDeepSigNet, pd.DataFrame]:
+) -> tuple[SWNUNetwork, pd.DataFrame]:
     # set seed
     set_seed(seed)
     
@@ -111,7 +111,7 @@ def implement_sdsn(
         "BiLSTM": BiLSTM,
         "comb_method": comb_method
     }
-    sdsn_model = StackedDeepSigNet(**SDSN_args)
+    sdsn_model = SWNUNetwork(**SDSN_args)
     
     if verbose_model:
         print(sdsn_model)
