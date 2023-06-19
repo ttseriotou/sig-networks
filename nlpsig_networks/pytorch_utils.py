@@ -726,8 +726,8 @@ def KFold_pytorch(
         return pd.DataFrame({"loss": None,
                              "accuracy": accuracy, 
                              "f1": f1,
-                             "f1_scores": f1_scores,
+                             "f1_scores": [f1_scores],
                              "valid_loss": None,
                              "valid_accuracy": valid_accuracy, 
                              "valid_f1": valid_f1,
-                             "valid_f1_scores": valid_f1_scores})
+                             "valid_f1_scores": [valid_f1_scores]})
