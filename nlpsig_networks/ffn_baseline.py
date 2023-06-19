@@ -5,7 +5,8 @@ import torch.nn as nn
 
 class FeedforwardNeuralNetModel(nn.Module):
     """
-    Feed-forward Neural Network model with ReLU activation layers.
+    Feed-forward Neural Network model with ReLU activation layers for
+    classification.
     """
 
     def __init__(
@@ -16,7 +17,8 @@ class FeedforwardNeuralNetModel(nn.Module):
         dropout_rate: float
     ):
         """
-        Feed-forward Neural Network model with ReLU activation layers.
+        Feed-forward Neural Network model with ReLU activation layers for
+        classification.
 
         Parameters
         ----------
@@ -30,6 +32,7 @@ class FeedforwardNeuralNetModel(nn.Module):
             Probability of dropout.
         """
         super(FeedforwardNeuralNetModel, self).__init__()
+        
         if type(hidden_dim) == int:
             hidden_dim = [hidden_dim]
         self.hidden_dim = hidden_dim

@@ -1,40 +1,52 @@
 from __future__ import annotations
 import torch
 import torch.nn as nn
+import numpy as np
 
-class BILSTM(nn.Module):
+
+class LSTMModel(nn.Module):
+    """
+    LSTM network model for  classification.
+    """
+    
     def __init__(
         self,
         input_dim: int, 
-        hidden_dim_lstm: int,
+        hidden_dim: int,
         num_layers: int,
         bidirectional: bool,
         output_dim: int,
         dropout_rate: float
     ):
         """
-        BiLSTM network
+        LSTM network model for  classification.
 
         Parameters
         ----------
         input_dim : int
-            _description_
-        hidden_dim_lstm : int
-            _description_
+            The number of expected features in the input x
+        hidden_dim : int
+            Dimensions of the hidden layers in the LSTM blocks.
+        num_layers : int
+            Number of recurrent layers.
+        bidirectional : bool
+            Whether or not a birectional LSTM is used,
+            by default False (unidirectional LSTM is used in this case).
         output_dim : int
-            _description_
+            Dimension of output layer.
         dropout_rate : float
-            _description_
+            Probability of dropout.
         """
-        super(BILSTM, self).__init__()
-        self.hidden_dim_lstm1 = hidden_dim_lstm
+        super(LSTMModel, self).__init__()
+        
+        self.hidden_dim1 = hidden_dim
         self.lstm = nn.LSTM(input_size=input_dim,
-                            hidden_size=hidden_dim_lstm,
+                            hidden_size=hidden_dim,
                             num_layers=num_layers,
                             batch_first=True,
                             bidirectional=bidirectional).double()
         self.dropout = nn.Dropout(dropout_rate)
-        self.fc = nn.Linear(hidden_dim_lstm, output_dim)
+        self.fc = nn.Linear(hidden_dim, output_dim)
     
     def forward(self, x):
         # why is this part necessary?
@@ -48,7 +60,7 @@ class BILSTM(nn.Module):
         out, _ = torch.nn.utils.rnn.pad_packed_sequence(out, batch_first=True)
         inverse_perm = np.argsort(perm_idx)
         out = out[inverse_perm]
-        out = out[:, :, :self.hidden_dim_lstm1] + out[:, :, self.hidden_dim_lstm1:]
+        out = out[:, :, :self.hidden_dim1] + out[:, :, self.hidden_dim1:]
 
         out = self.dropout(out)
 
