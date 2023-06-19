@@ -1,6 +1,6 @@
 from __future__ import annotations
 import os
-from typing import Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -20,10 +20,34 @@ class EarlyStopper:
     """
     Class to decide whether or not to stop training early by tracking
     the performance of the model on the validation set.
+    
+    Class initialises a counter which will increase by 1 each time
+    the validation metric gets worse. 
     """
+    
     def __init__(self, metric: str, patience: int = 1, min_delta: float = 0.0):
+        """
+        Class to decide whether or not to stop training early by tracking
+        the performance of the model on the validation set.
+        
+        Class initialises a counter which will increase by 1 each time
+        the validation metric gets worse. 
+
+        Parameters
+        ----------
+        metric : str
+            Metric to use when deciding whether or not to stop training.
+            Must be either "loss", "accuracy" or "f1" (for macro F1).
+        patience : int, optional
+            Patience to allow, i.e. the number of epochs allowed for
+            the metric to get worse, by default 1.
+        min_delta : float, optional
+            Minimum amount of the metric has to get worse by
+            in order to increase the count, by default 0.0.
+        """
         if metric not in ["loss", "accuracy", "f1"]:
             raise ValueError("metric must be either 'loss', 'accuracy' or 'f1'.")
+        
         self.metric = metric
         self.patience = patience
         self.min_delta = min_delta
@@ -31,23 +55,51 @@ class EarlyStopper:
         self.min_validation = np.inf
         self.max_validation = -np.inf
 
-    def early_stop(self, validation_metric: float) -> bool:
+    def __call__(self, validation_metric: float) -> bool:
+        """
+        Method for determining whether or not to stop.
+        
+        If the validation metric gets worse (worse by an amount of self.min_delta),
+        then will increase the counter. If the counter is larger than or
+        equal to patience, then will return True, otherwise return False.
+        
+        If the validation metric is the best model so far, it will reset the counter to 0.
+
+        Parameters
+        ----------
+        validation_metric : float
+            The current metric obtained when evaluating
+            the model on the validation set.
+
+        Returns
+        -------
+        bool
+            True to determine that we should stop training,
+            False otherwise.
+        """
         if self.metric == "loss":
             if validation_metric < self.min_validation:
+                # a lower loss is better
+                # we have a new best validation metric, so reset counter
                 self.min_validation = validation_metric
                 self.counter = 0
             elif validation_metric > (self.min_validation + self.min_delta):
+                # new validation metric is worse than the best, increase counter
                 self.counter += 1
                 if self.counter >= self.patience:
                     return True
         elif self.metric in ["accuracy", "f1"]:
             if validation_metric > self.max_validation:
+                # a higher accuracy/F1 score is better
+                # we have a new best validation metric, so reset counter
                 self.max_validation = validation_metric
                 self.counter = 0
             elif validation_metric < (self.max_validation - self.min_delta):
+                # new validation metric is worse than the best, increase counter
                 self.counter += 1
                 if self.counter > self.patience:
                     return True
+
         return False
 
 
@@ -63,12 +115,46 @@ class SaveBestModel:
     as good as the previous best validation metric and the training metric
     is better than the previous best training metric.
     """
+    
     def __init__(self,
                  metric: str,
                  best_valid_metric: float | None = None,
                  best_train_metric: float | None = None,
                  output: str = "best_model.pkl",
                  verbose: bool = False):
+        """
+        Class to save the best model while training. If the current epoch's 
+        validation metric is better than the previous best metric, then save the
+        model state.
+        
+        If a metric on the training set is passed, we also track training metric progress,
+        then save the model state if either the validation metric is strictly better
+        than the previous best validation metric, or if the validation metric is 
+        as good as the previous best validation metric and the training metric
+        is better than the previous best training metric.
+
+        Parameters
+        ----------
+        metric : str
+            Metric to use when deciding whether or not to stop training.
+            Must be either "loss", "accuracy" or "f1" (for macro F1).
+        best_valid_metric : float | None, optional
+            Current best metric on the validation set, by default None.
+            If None, this will be set to infinity if metric="loss"
+            (worse loss possible), otherwise will be set to -infinity
+            if metric is either "accuracy" or "F1".
+        best_train_metric : float | None, optional
+            Current best metric on the train set, by default None.
+            If None, this will be set to infinity if metric="loss"
+            (worse loss possible), otherwise will be set to -infinity
+            if metric is either "accuracy" or "F1".
+            This can be used for making a decision between two models which
+            have the same validation score.
+        output : str, optional
+            Where to store the best model, by default "best_model.pkl".
+        verbose : bool, optional
+            Whether or not to print out progress, by default False.
+        """
         if metric not in ["loss", "accuracy", "f1"]:
             raise ValueError("metric must be either 'loss', 'accuracy' or 'f1'.")
         if best_valid_metric is None:
@@ -81,6 +167,7 @@ class SaveBestModel:
                 best_train_metric = float('inf')
             elif metric in ["accuracy", "f1"]:
                 best_train_metric = -float('inf')
+                
         self.metric = metric
         self.best_valid_metric = best_valid_metric
         self.best_train_metric = best_train_metric
@@ -93,6 +180,27 @@ class SaveBestModel:
                  epoch: int | None = None,
                  current_train_metric: float | None = None,
                  extra_info: dict | str | None = None) -> None:
+        """
+        Method for determining whether or not to save current model.
+
+        Parameters
+        ----------
+        current_valid_metric : float
+            The current metric obtained when evaluating
+            the model on the validation set.
+        model : nn.Module | None, optional
+            PyTorch model to save, by default None.
+        epoch : int | None, optional
+            Epoch number, by default None.
+        current_train_metric : float | None, optional
+            The current metric obtained when evaluating
+            the model on the training set, by default None.
+            This can be used for making a decision between two models which
+            have the same validation score.
+        extra_info : dict | str | None, optional
+            Any extra information that you want to save to this model
+            (if it does get saved), by default None.
+        """
         if self.metric == "loss":
             # metric lower better
             if current_train_metric is not None:
@@ -132,7 +240,7 @@ def validation_pytorch(
     epoch: int,
     verbose: bool = False,
     verbose_epoch: int = 100,
-) -> Tuple[float, float, float]:
+) -> dict[str, float | list[float]]:
     """
     Evaluates the PyTorch model to a validation set and
     returns the total loss, accuracy and F1 score
@@ -154,11 +262,12 @@ def validation_pytorch(
 
     Returns
     -------
-    Tuple[float, float, float]
-        Tuple with elements:
-        - validation loss
-        - validation accuracy
-        - validation macro F1 score
+    dict[str, float | list[float]]
+    Dictionary with following items and keys:
+        - "loss": average loss for the validation set
+        - "accuracy": accuracy for the validation set
+        - "f1": macro F1 score for the validation set
+        - "f1_scores": F1 scores for each class in the validation set
     """
     # sets the model to evaluation mode
     model.eval()
@@ -327,7 +436,7 @@ def training_pytorch(
                 
             if early_stopping:
                 # determine whether or not to stop early
-                if early_stopper.early_stop(metric_v):
+                if early_stopper(metric_v):
                     if verbose:
                         print(f"Early stopping at epoch {epoch+1}!")
                     break
@@ -354,7 +463,7 @@ def testing_pytorch(
     test_loader: DataLoader,
     criterion: nn.Module,
     verbose: bool = True,
-) -> Tuple[torch.tensor, torch.tensor]:
+) -> dict[str, torch.tensor | float | list[float]]:
     """
     Evaluates the PyTorch model to a validation set and
     returns the predicted labels and their corresponding true labels
@@ -372,12 +481,14 @@ def testing_pytorch(
 
     Returns
     -------
-    Tuple[Tuple[torch.tensor, torch.tensor], loss, accuracy, F1 score]
-        Tuple with elements:
-        - tuple of predicted labels and true labels
-        - test loss
-        - test accuracy
-        - test macro F1 score
+    dict[str, torch.tensor | float | list[float]]
+        Dictionary with following items and keys:
+        - "predicted": torch.tensor containing the predicted labels
+        - "labels": torch.tensor containing the true labels
+        - "loss": average loss for the test set
+        - "accuracy": accuracy for the test set
+        - "f1": macro F1 score for the test set
+        - "f1_scores": F1 scores for each class in the test set
     """
     # sets the model to evaluation mode
     model.eval()
@@ -427,6 +538,7 @@ def KFold_pytorch(
     criterion: nn.Module,
     optimizer: Optimizer,
     num_epochs: int,
+    return_metric_for_each_fold: bool = False,
     seed: Optional[int] = 42,
     save_best: bool = False,
     early_stopping: bool = False,
@@ -449,6 +561,16 @@ def KFold_pytorch(
         PyTorch Optimizer
     num_epochs : int
         Number of epochs
+    return_metric_for_each_fold : bool, optional
+        Whether or not to return the metrics for each fold individually,
+        i.e. every row in the returned dataframe is the performance
+        of the fitted model for each fold. If False, it will
+        keep track of the predicted and true labels in the folds
+        and return the overall metric for the dataset.
+        If True, it will simply compute the metrics for each fold
+        indvidually. One can then obtain a single metric by
+        averaging over the performance over the different folds.
+        By default False.
     seed : Optional[int], optional
         Seed number, by default 42
     early_stopping: bool, optional
@@ -464,7 +586,8 @@ def KFold_pytorch(
     Returns
     -------
     pd.DataFrame
-        Accuracy and F1 scores for each fold
+        Loss, Accuracy, F1 scores and macro F1 score for each fold
+        (test and validation)
     """
     torch.save(
         obj={
@@ -474,6 +597,7 @@ def KFold_pytorch(
         },
         f="starting_state.pkl",
     )
+    
     loss = []
     accuracy = []
     f1 = []
@@ -482,6 +606,10 @@ def KFold_pytorch(
     valid_accuracy = []
     valid_f1 = []
     valid_f1_scores = []
+    labels = torch.empty((0))
+    predicted = torch.empty((0))
+    valid_labels = torch.empty((0))
+    valid_predicted = torch.empty((0))
     fold_list = tqdm(range(folds.n_splits)) if verbose else range(folds.n_splits)
     for fold in fold_list:
         if verbose:
@@ -526,6 +654,10 @@ def KFold_pytorch(
                                        criterion=criterion,
                                        verbose=verbose)
 
+        # store the true labels and predicted labels for this fold
+        labels = torch.cat([labels, test_results["labels"]])
+        predicted = torch.cat([predicted, test_results["predicted"]])
+        
         # evaluate model
         loss.append(test_results["loss"])
         accuracy.append(test_results["accuracy"])
@@ -538,6 +670,12 @@ def KFold_pytorch(
                                             test_loader=valid,
                                             criterion=criterion,
                                             verbose=verbose)
+            
+            # store the true labels and predicted labels for this fold
+            valid_labels = torch.cat([valid_labels, valid_results["labels"]])
+            valid_predicted = torch.cat([valid_predicted, valid_results["predicted"]])
+            
+            # store the metrics for the validation set
             valid_loss.append(valid_results["loss"])
             valid_accuracy.append(valid_results["accuracy"])
             valid_f1.append(valid_results["f1"])
@@ -551,15 +689,45 @@ def KFold_pytorch(
     # remove starting state pickle file
     os.remove("starting_state.pkl")
     # if save_best=True, it will save models in best_model.pkl by default
-    # so we remove
+    # so we remove this file
     if os.path.exists("best_model.pkl"):
         os.remove("best_model.pkl")
+    
+    if return_metric_for_each_fold:
+        # return how well the model performed on each individual fold
+        return pd.DataFrame({"loss": loss,
+                             "accuracy": accuracy, 
+                             "f1": f1,
+                             "f1_scores": f1_scores,
+                             "valid_loss": valid_loss,
+                             "valid_accuracy": valid_accuracy, 
+                             "valid_f1": valid_f1,
+                             "valid_f1_scores": valid_f1_scores})
+    else:
+        # compute how well the model performed on the test sets together
+        # compute accuracy
+        accuracy = ((predicted == labels).sum() / len(labels)).item()
+        # compute F1
+        f1_scores = metrics.f1_score(labels, predicted, average=None)
+        f1 = sum(f1_scores)/len(f1_scores)
         
-    return pd.DataFrame({"loss": loss,
-                         "accuracy": accuracy, 
-                         "f1": f1,
-                         "f1_scores": f1_scores,
-                         "valid_loss": valid_loss,
-                         "valid_accuracy": valid_accuracy, 
-                         "valid_f1": valid_f1,
-                         "valid_f1_scores": valid_f1_scores})
+        if valid is not None:
+            # compute how well the model performed on the
+            # validation sets in the folds
+            valid_accuracy = ((predicted == labels).sum() / len(labels)).item()
+            # compute F1
+            valid_f1_scores = metrics.f1_score(labels, predicted, average=None)
+            valid_f1 = sum(f1_scores)/len(f1_scores)
+        else:
+            valid_accuracy = None
+            valid_f1_scores = None
+            valid_f1 = None
+        
+        return pd.DataFrame({"loss": None,
+                             "accuracy": accuracy, 
+                             "f1": f1,
+                             "f1_scores": f1_scores,
+                             "valid_loss": None,
+                             "valid_accuracy": valid_accuracy, 
+                             "valid_f1": valid_f1,
+                             "valid_f1_scores": valid_f1_scores})
