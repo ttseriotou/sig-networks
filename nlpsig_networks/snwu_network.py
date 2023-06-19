@@ -75,25 +75,10 @@ class SWNUNetwork(nn.Module):
             - concatenation: concatenation of path signature and embedding vector
             - gated_addition: element-wise addition of path signature and embedding vector
         """
+        super(SWNUNetwork, self).__init__()
+        
+        # dimensionality reduction on the input prior to SWNU
         self.input_channels = input_channels
-        
-        if isinstance(hidden_dim_swnu, int):
-            hidden_dim_swnu = [hidden_dim_swnu]
-        if isinstance(hidden_dim_ffn, int):
-            hidden_dim_ffn = [hidden_dim_ffn]
-        self.hidden_dim_swnu = hidden_dim_swnu
-        self.hidden_dim_ffn = hidden_dim_ffn
-        
-        self.embedding_dim = embedding_dim
-        self.num_time_features = num_time_features
-        if comb_method not in ["concatenation", "gated_addition"]:
-            raise ValueError(
-                "`comb_method` must be either 'concatenation' or 'gated_addition'."
-            )
-        self.comb_method = comb_method
-        if augmentation_type not in ["Conv1d", "signatory"]:
-            raise ValueError("`augmentation_type` must be 'Conv1d' or 'signatory'.")
-        
         self.augmentation_type = augmentation_type
         if isinstance(hidden_dim_aug, int):
             hidden_dim_aug = [hidden_dim_aug]
@@ -110,6 +95,7 @@ class SWNUNetwork(nn.Module):
             out_channels=output_channels,
             **augmentation_args,
         )
+        # alternative to convolution: using Augment from signatory 
         self.augment = signatory.Augment(
             in_channels=input_channels,
             layer_sizes=self.hidden_dim_aug + [output_channels],
@@ -120,22 +106,37 @@ class SWNUNetwork(nn.Module):
         # non-linearity
         self.tanh1 = nn.Tanh()
         
+        # signature window network unit to obtain feature set for FFN
+        if isinstance(hidden_dim_swnu, int):
+            hidden_dim_swnu = [hidden_dim_swnu]
+
         self.swnu = SWNU(input_size=output_channels,
-                         hidden_dim=self.hidden_dim_swnu,
+                         hidden_dim=hidden_dim_swnu,
                          log_signature=log_signature,
                          sig_depth=sig_depth,
                          BiLSTM=BiLSTM)
         
         # signature without lift (for passing into FFN)
         mult = 2 if BiLSTM else 1
-        if self.log_signature:
+        if log_signature:
             signature_output_channels = signatory.logsignature_channels(
-                in_channels=mult * self.hidden_dim_swnu[-1], depth=sig_depth
+                in_channels=mult * hidden_dim_swnu[-1], depth=sig_depth
             )
         else:
             signature_output_channels = signatory.signature_channels(
-                channels=mult * self.hidden_dim_swnu[-1], depth=sig_depth
+                channels=mult * hidden_dim_swnu[-1], depth=sig_depth
             )
+        
+        # determining how to concatenate features to the SWNU features
+        self.embedding_dim = embedding_dim
+        self.num_time_features = num_time_features
+        if comb_method not in ["concatenation", "gated_addition"]:
+            raise ValueError(
+                "`comb_method` must be either 'concatenation' or 'gated_addition'."
+            )
+        self.comb_method = comb_method
+        if augmentation_type not in ["Conv1d", "signatory"]:
+            raise ValueError("`augmentation_type` must be 'Conv1d' or 'signatory'.")
         
         # find dimension of features to pass through FFN
         if self.comb_method == "concatenation":
@@ -159,6 +160,11 @@ class SWNUNetwork(nn.Module):
             # non-linearity
             self.tanh2 = nn.Tanh()
 
+        # FFN for classification
+        if isinstance(hidden_dim_ffn, int):
+            hidden_dim_ffn = [hidden_dim_ffn]
+        self.hidden_dim_ffn = hidden_dim_ffn
+        
         # FFN: input layer
         self.ffn_input_layer = nn.Linear(input_dim, self.hidden_dim_ffn[0])
         self.relu = nn.ReLU()

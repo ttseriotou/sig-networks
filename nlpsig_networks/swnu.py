@@ -35,6 +35,8 @@ class SWNU(nn.Module):
             Whether or not a birectional LSTM is used for the final SWNU block,
             by default False (unidirectional LSTM is used in this case).
         """
+        super(SWNU, self).__init__()
+        
         # logging inputs to the class
         self.input_size = input_size
         self.log_signature = log_signature
@@ -89,10 +91,10 @@ class SWNU(nn.Module):
         
         # take signature lifts and lstm
         for l in range(len(self.hidden_dim)):
-            out = self.signature_layers[l](out)
-            out, _ = self.lstm_layers[l](out)
+            x = self.signature_layers[l](x)
+            x, _ = self.lstm_layers[l](x)
         
         # take final signature
-        out = self.signature2(out)
+        out = self.signature2(x)
         
         return out
