@@ -362,7 +362,7 @@ def swnu_network_hyperparameter_search(
                                             results["method"] = method
                                             results["input_channels"] = input_channels
                                             results["output_channels"] = output_channels
-                                            results["num_time_features"] = num_time_features
+                                            results["num_time_features"] = len(time_feature)
                                             results["embedding_dim"] = embedding_dim
                                             results["log_signature"] = log_signature
                                             results["lstm_hidden_dim"] = [lstm_hidden_dim for _ in range(len(results.index))]
@@ -397,7 +397,7 @@ def swnu_network_hyperparameter_search(
                                                             "method": method,
                                                             "input_channels": input_channels,
                                                             "output_channels": output_channels,
-                                                            "num_time_features": num_time_features,
+                                                            "num_time_features": len(time_feature),
                                                             "embedding_dim": embedding_dim,
                                                             "log_signature": log_signature,
                                                             "lstm_hidden_dim": lstm_hidden_dim,
