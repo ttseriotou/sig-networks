@@ -436,7 +436,7 @@ def obtain_mean_history(df: pd.DataFrame,
                       "include_current_embedding": True}
     
     # obtain path by using PrepareData class and .pad method
-    paths = nlpsig.PrepareData(df,
+    paths = nlpsig.PrepareData(original_df=df,
                                id_column=id_column,
                                label_column=label_column,
                                embeddings=embeddings)
@@ -444,10 +444,10 @@ def obtain_mean_history(df: pd.DataFrame,
     
     # slice the path in specified way
     if path_indices is not None:
-        path = path[path_indices][:,:,:-2]
+        path = path[path_indices]
 
     # remove last two columns (which contains the id and the label)
-    path = path[:,:,:-2]
+    path = path[:,:,:-2].astype("float")
     
     # average in the first dimension to pool embeddings in the path
     path = path.mean(1).astype("float")
@@ -496,7 +496,7 @@ def obtain_signatures_history(method: str,
                                                      random_state=seed)
     
     # obtain path by using PrepareData class and .pad method
-    paths = nlpsig.PrepareData(df,
+    paths = nlpsig.PrepareData(original_df=df,
                                id_column=id_column,
                                label_column=label_column,
                                embeddings=embeddings,
@@ -505,7 +505,7 @@ def obtain_signatures_history(method: str,
     
     # slice the path in specified way
     if path_indices is not None:
-        path = path[path_indices][:,:,:-2]
+        path = path[path_indices]
 
     # remove last two columns (which contains the id and the label)
     path = path[:,:,:-2].astype("float")

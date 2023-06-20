@@ -39,7 +39,8 @@ class LSTMModel(nn.Module):
         """
         super(LSTMModel, self).__init__()
         
-        self.hidden_dim1 = hidden_dim
+        self.hidden_dim = hidden_dim
+        self.bidirectional = bidirectional
         self.lstm = nn.LSTM(input_size=input_dim,
                             hidden_size=hidden_dim,
                             num_layers=num_layers,
@@ -48,32 +49,36 @@ class LSTMModel(nn.Module):
         self.dropout = nn.Dropout(dropout_rate)
         self.fc = nn.Linear(hidden_dim, output_dim)
     
-    def forward(self, x):
-        # why is this part necessary?
-        seq_lengths = torch.sum(x[:, :, 0] != 123, 1)
+    def forward(self, x: torch.Tensor):
+        # find length of paths by finding how many non-zero rows there are
+        seq_lengths = torch.sum(torch.sum(x, 2) != 0, 1)
+        # sort sequences by length in a decreasing order
         seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
         x = x[perm_idx]
 
-        #BiLSTM 1
-        x_pack = torch.nn.utils.rnn.pack_padded_sequence(x, seq_lengths, batch_first=True)
-        out, (_, _) = self.lstm1(x_pack)
-        out, _ = torch.nn.utils.rnn.pad_packed_sequence(out, batch_first=True)
+        # pack a rensor containing padded sequences of variable length
+        x_pack = torch.nn.utils.rnn.pack_padded_sequence(
+            x,
+            lengths=seq_lengths,
+            batch_first=True
+        )
+        
+        # pass through LSTM
+        out, (out_h, _) = self.lstm(x_pack)
+        
+        # obtain last hidden states
+        if self.bidirectional:
+            # element-wise add if have BiLSTM
+            out = out_h[-1, :, :] + out_h[-2, :, :]
+        else:
+            out = out_h[-1, :, :]
+        
+        # need to reverse the original indexing afterwards
         inverse_perm = np.argsort(perm_idx)
         out = out[inverse_perm]
-        out = out[:, :, :self.hidden_dim1] + out[:, :, self.hidden_dim1:]
 
+        # readout
         out = self.dropout(out)
-
-        #BiLSTM 2
-        out = out[perm_idx]
-        x_pack = torch.nn.utils.rnn.pack_padded_sequence(out, seq_lengths, batch_first=True)
-        outl, (out_h, _) = self.lstm2(x_pack)
-        outl, _ = torch.nn.utils.rnn.pad_packed_sequence(outl, batch_first=True)
-        outl = outl[inverse_perm]
-        out = out_h[-1, :, :] + out_h[-2, :, :]
-        out = out[inverse_perm]
-
-        out = self.dropout(out)
-
-        out = self.fc3(out.float())
+        out = self.fc(out.float())
+        
         return out
