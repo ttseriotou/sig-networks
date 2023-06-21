@@ -50,13 +50,15 @@ class LSTMModel(nn.Module):
         self.fc = nn.Linear(hidden_dim, output_dim)
     
     def forward(self, x: torch.Tensor):
+        # x has dimensions [batch, length of signal, channels]
+        # assume empty units are padded using zeros and padded from below
         # find length of paths by finding how many non-zero rows there are
         seq_lengths = torch.sum(torch.sum(x, 2) != 0, 1)
         # sort sequences by length in a decreasing order
         seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
         x = x[perm_idx]
 
-        # pack a rensor containing padded sequences of variable length
+        # pack a tensor containing padded sequences of variable length
         x_pack = torch.nn.utils.rnn.pack_padded_sequence(
             x,
             lengths=seq_lengths,
