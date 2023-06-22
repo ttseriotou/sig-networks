@@ -21,7 +21,7 @@ def obtain_SDSN_input(
     embeddings: np.array,
     k: int,
     seed: int = 42,
-    path_indices: np.array | None = None
+    path_indices : list | np.array | None = None
 ) -> tuple[torch.tensor, int]:
     # use nlpsig to construct the path as a numpy array
     # first define how we construct the path
@@ -259,7 +259,7 @@ def sdsn_hyperparameter_search(
     gamma: float = 0.0,
     augmentation_type: str = "Conv1d",
     comb_method: str = "concatenation",
-    path_indices: np.array | None = None,
+    path_indices : list | np.array | None = None,
     data_split_seed: int = 0,
     k_fold: bool = False,
     n_splits: int = 5,
