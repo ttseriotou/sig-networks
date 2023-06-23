@@ -23,7 +23,7 @@ def obtain_SWNUNetwork_input(
     time_feature: list[str] | str | None = None,
     standardise_method: list[str] | str | None = None,
     seed: int = 42,
-    path_indices: np.array | None = None
+    path_indices : list | np.array | None = None
 ) -> tuple[torch.tensor, int]:
     # use nlpsig to construct the path as a numpy array
     # first define how we construct the path
@@ -263,7 +263,7 @@ def swnu_network_hyperparameter_search(
     standardise_method: list[str] | str | None = None,
     augmentation_type: str = "Conv1d",
     comb_method: str = "concatenation",
-    path_indices: np.array | None = None,
+    path_indices : list | np.array | None = None,
     data_split_seed: int = 0,
     k_fold: bool = False,
     n_splits: int = 5,
