@@ -10,16 +10,19 @@ class SeqSigNet(nn.Module):
     def __init__(
         self, 
         input_channels: int, 
-        output_channels: int, 
+        output_channels: int,
+        num_time_features: int, 
+        log_signature: bool,
         sig_depth: int, 
         hidden_dim_swnu: list[int] | int,
         hidden_dim_lstm: int,
         input_bert_dim: int, 
-        hidden_dim: int, 
+        hidden_dim_ffn: list[int] | int,
         output_dim: int, 
         dropout_rate: float, 
-        augmentation_tp: str = 'Conv1d', 
-        augmentation_layers: list[int] | int |None=(),
+        augmentation_type: str = 'Conv1d', 
+        hidden_dim_aug: list[int] | int |None=(),
+        BiLSTM: bool = False,
         comb_method: str ='concatenation'):
         """
         SeqSigNet network for classification.
@@ -31,6 +34,10 @@ class SeqSigNet(nn.Module):
             Dimension of the (dimensonally reduced) history embeddings that will be passed in. 
         output_channels : int
             Requested dimension of the embeddings after convolution layer.
+        num_time_features : int
+            Number of time features to add to FFN input. If none, set to zero.
+        log_signature : bool
+            Whether or not to use the log signature or standard signature.
         sig_depth : int
             The depth to truncate the path signature at.
         hidden_dim_swnu : list[int] | int
@@ -39,21 +46,24 @@ class SeqSigNet(nn.Module):
             Dimensions of the hidden layers in the final BiLSTM of SWNU units.
         input_bert_dim: int
             Dimensions of current BERT post embedding. Usually 384 or 768.
-        hidden_dim: int
+        hidden_dim_ffn: int
             Dimension of the hidden layers in the FFN.
         output_dim : int
             Dimension of the output layer in the FFN.
         dropout_rate : float
             Dropout rate in the FFN.      
-        augmentation_tp : str, optional
+        augmentation_type : str, optional
             Method of augmenting the path, by default "Conv1d".
             Options are:
             - "Conv1d": passes path through 1D convolution layer.
             - else: passes path through `Augment` layer from `signatory` package.
-        augmentation_layers: list[int] | int | None = ()
+        hidden_dim_aug: list[int] | int | None = ()
             Dimensions of the hidden layers in the augmentation layer.
             Passed into `Augment` class from `signatory` package if
             `augmentation_type!='Conv1d'`, by default ().
+        BiLSTM : bool, optional
+            Whether or not a birectional LSTM is used in the SWNU units,
+            by default False (unidirectional LSTM is used in this case).
         comb_method : str ='concatenation'
             Determines how to combine the path signature and embeddings,
             by default "gated_addition".
@@ -65,100 +75,119 @@ class SeqSigNet(nn.Module):
         """
 
         super(SeqSigNet, self).__init__()
-        self.input_channels = input_channels
-        self.augmentation_tp = augmentation_tp 
-        self.comb_method = comb_method
+        
         self.input_bert_dim = input_bert_dim #384
+        self.num_time_features = num_time_features
+        self.input_channels = input_channels
+
+        if isinstance(hidden_dim_aug, int):
+            hidden_dim_aug = [hidden_dim_aug]
+        elif hidden_dim_aug is None:
+            hidden_dim_aug = []
+        elif (hidden_dim_aug == ()):
+            hidden_dim_aug = []
+        self.hidden_dim_aug = hidden_dim_aug
+
+        if augmentation_type not in ["Conv1d", "signatory"]:
+            raise ValueError("`augmentation_type` must be 'Conv1d' or 'signatory'.")
+        self.augmentation_type = augmentation_type
+
+        if comb_method not in ["concatenation", "gated_addition", "gated_concatenation", "scaled_concatenation"]:
+            raise ValueError(
+                "`comb_method` must be either 'concatenation' or 'gated_addition' or 'gated_concatenation' or 'scaled_concatenation'."
+            )
+        self.comb_method = comb_method
 
         #Convolution
-        self.conv = nn.Conv1d(input_channels, output_channels, 3, stride=1, padding=1).double()
+        self.conv = nn.Conv1d(
+            in_channels=input_channels,
+            out_channels=output_channels,
+            kernel_size= 3,
+            stride=1, 
+            padding=1).double()
+
+        # alternative to convolution: using Augment from signatory 
         self.augment = signatory.Augment(in_channels=input_channels,
-                    layer_sizes = augmentation_layers,
+                    layer_sizes = self.hidden_dim_aug + [output_channels],
                     kernel_size=3,
                     padding = 1,
                     stride = 1,
                     include_original=False,
                     include_time=False).double()
+
         #Non-linearity
         self.tanh1 = nn.Tanh()
+
+        # signature window network unit to obtain feature set for FFN
+        if isinstance(hidden_dim_swnu, int):
+            hidden_dim_swnu = [hidden_dim_swnu]
         
         #Signatures and LSTMs for signature windows
         self.swnu = SWNU(input_size=output_channels,
                          hidden_dim=hidden_dim_swnu,
-                         log_signature=True,
+                         log_signature=log_signature,
                          sig_depth=sig_depth,
-                         BiLSTM=False).double()
+                         BiLSTM=BiLSTM).double()
 
-        """
-        #Signature with lift
-        self.signature1 = signatory.LogSignature(depth=sig_depth, stream=True)
-        self.lstm_sig1 = nn.LSTM(input_size=input_dim_lstm, hidden_size=hidden_dim_swnu[-1], num_layers=1, batch_first=True, bidirectional=False).double()
-        self.signature2 = signatory.LogSignature(depth=sig_depth, stream=False)
-        """
-        input_dim_lstmsig = signatory.logsignature_channels(hidden_dim_swnu[-1] ,sig_depth)
+        # signature without lift (for passing into BiLSTM)
+        mult = 2 if BiLSTM else 1
+        if log_signature:
+            input_dim_lstmsig = signatory.logsignature_channels(in_channels=mult*hidden_dim_swnu[-1], depth=sig_depth)
+        else:
+            input_dim_lstmsig = signatory.signature_channels(in_channels=mult*hidden_dim_swnu[-1], depth=sig_depth)
 
+        #BiLSTM
         self.lstm_sig2 = nn.LSTM(input_size=input_dim_lstmsig, hidden_size=hidden_dim_lstm, num_layers=1, batch_first=True, bidirectional=True).double()
 
         #combination method
         if comb_method=='concatenation':
-            input_dim = hidden_dim_lstm + self.input_bert_dim + 1 
+            input_dim = hidden_dim_lstm + self.input_bert_dim + self.num_time_features
         elif comb_method=='gated_addition':
             input_dim = self.input_bert_dim
-            input_gated_linear = signatory.logsignature_channels(hidden_dim_lstm, sig_depth) + 1
+            input_gated_linear = signatory.logsignature_channels(hidden_dim_lstm, sig_depth) + self.num_time_features
             self.fc_scale = nn.Linear(input_gated_linear, self.input_bert_dim)
             #define the scaler parameter
             self.scaler = torch.nn.Parameter(torch.zeros(1,self.input_bert_dim))
         elif comb_method=='gated_concatenation':
-            input_gated_linear = signatory.logsignature_channels(hidden_dim_lstm, sig_depth) + 1
+            input_gated_linear = signatory.logsignature_channels(hidden_dim_lstm, sig_depth) + self.num_time_features
             input_dim = self.input_bert_dim + input_gated_linear
             #define the scaler parameter
             self.scaler1 = torch.nn.Parameter(torch.zeros(1,input_gated_linear))
         elif comb_method=='scaled_concatenation':
-            input_dim = signatory.logsignature_channels(hidden_dim_lstm, sig_depth) + self.input_bert_dim + 1 
+            input_dim = signatory.logsignature_channels(hidden_dim_lstm, sig_depth) + self.input_bert_dim + self.num_time_features 
             #define the scaler parameter
             self.scaler2 = torch.nn.Parameter(torch.tensor([0.0]))
-
-        # Linear function
-        self.fc1 = nn.Linear(input_dim, hidden_dim) 
-        # Non-linearity
-        self.relu1 = nn.ReLU()
-        #Dropout
+        
+        if isinstance(hidden_dim_ffn, int):
+            hidden_dim_ffn = [hidden_dim_ffn]
+        self.hidden_dim_ffn = hidden_dim_ffn
+        # FFN: input layer
+        self.ffn_input_layer = nn.Linear(input_dim, self.hidden_dim_ffn[0])
+        self.relu = nn.ReLU()
         self.dropout = nn.Dropout(dropout_rate)
-        # Linear function 2: 
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        # Non-linearity 2
-        self.relu2 = nn.ReLU()
-        # Linear function 3 (readout): 
-        self.fc3 = nn.Linear(hidden_dim, output_dim)
-
-    def _unit_deepsignet(self,u):  
-        #SWNU execution to form each input unit in the final BiLSTM
-
-        out = u
-        #Convolution
-        if (self.augmentation_tp == 'Conv1d'):
-            out = self.conv(out) #get only the path information
-            out = self.tanh1(out)
-            out = torch.transpose(out, 1,2) #swap dimensions
-        else:
-            out = self.augment(torch.transpose(out,1,2))
-
+        input_hidden_dim = self.hidden_dim_ffn[0]
         
-        #Add time for signature
-        if self.add_time:
-            out = torch.cat((out, torch.transpose(u[:,self.input_channels:(self.input_channels+1), :], 1,2)), dim=2)
+        # FFN: hidden layers
+        self.ffn_linear_layers = []
+        self.ffn_non_linear_layers = []
+        self.dropout_layers = []
+        for l in range(1,len(self.hidden_dim_ffn)):
+            self.ffn_linear_layers.append(nn.Linear(input_hidden_dim, self.hidden_dim_ffn[l]))
+            self.ffn_non_linear_layers.append(nn.ReLU())
+            self.dropout_layers.append(nn.Dropout(dropout_rate))
+            input_hidden_dim = self.hidden_dim_ffn[l]
         
-        #Signature
-        out = self.signature1(out)
-        out, (_, _) = self.lstm_sig1(out)
-        #Signature
-        out = self.signature2(out)
-        return out
+        self.ffn_linear_layers = nn.ModuleList(self.ffn_linear_layers)
+        self.ffn_non_linear_layers = nn.ModuleList(self.ffn_non_linear_layers)
+        self.dropout_layers = nn.ModuleList(self.dropout_layers)
+        
+        # FFN: readout
+        self.ffn_final_layer = nn.Linear(input_hidden_dim, output_dim)
 
     def _unit_swnu(self,u):
         
         # convolution
-        if self.augmentation_tp == "Conv1d":
+        if self.augmentation_type == "Conv1d":
             out = self.conv(u) #get only the path information
             out = self.tanh1(out)
             out = torch.transpose(out, 1,2) #swap dimensions
@@ -170,17 +199,7 @@ class SeqSigNet(nn.Module):
         return out
 
     def forward(self, x):
-        """
-        #SWNU for each history window
-        out = self._unit_deepsignet(x[:,:self.input_channels, :, -1])
-        out = out.unsqueeze(1)
-        for window in range(x.shape[3]-1,0, -1):
-            out_unit = self._unit_deepsignet(x[:,:self.input_channels, :, window-1])
-            out_unit = out_unit.unsqueeze(1)
-            out = torch.cat((out, out_unit), dim=1)
-
-        """
-        ################NEW CODE
+       
         #SWNU for each history window
         out = self._unit_swnu(x[:,:self.input_channels, :, -1])
         out = out.unsqueeze(1)
@@ -189,49 +208,46 @@ class SeqSigNet(nn.Module):
             out_unit = out_unit.unsqueeze(1)
             out = torch.cat((out, out_unit), dim=1)
  
-        #########################################
 
         #BiLSTM that combines all deepsignet windows together
         _, (out, _) = self.lstm_sig2(out)
         out = out[-1, :, :] + out[-2, :, :]
 
-        #Combine Last Post Embedding
+        #Combine Time Features and Last Post Embedding
         if self.comb_method=='concatenation':
-            out = torch.cat((out, x[:, self.input_channels:(self.input_channels+1),:, 0].max(2)[0], x[:,(self.input_channels+1):, 0, 0]), dim=1)
+            out = torch.cat((out, x[:, self.input_channels:(self.input_channels+self.num_time_features),:, 0].max(2)[0], x[:,(self.input_channels+self.num_time_features):, 0, 0]), dim=1)
         elif self.comb_method=='gated_addition':
-            out_gated = torch.cat((out, x[:, self.input_channels:(self.input_channels+1),:, 0].max(2)[0]), dim=1)
+            out_gated = torch.cat((out, x[:, self.input_channels:(self.input_channels+self.num_time_features),:, 0].max(2)[0]), dim=1)
             out_gated = self.fc_scale(out_gated.float())
             out_gated = self.tanh1(out_gated)
             out_gated = torch.mul(self.scaler, out_gated)
             #concatenation with bert output
-            out = out_gated + x[:,(self.input_channels+1):, 0]
+            out = out_gated + x[:,(self.input_channels+self.num_time_features):, 0]
         elif self.comb_method=='gated_concatenation':
-            out_gated = torch.cat((out, x[:, self.input_channels:(self.input_channels+1),:, 0].max(2)[0]), dim=1)
+            out_gated = torch.cat((out, x[:, self.input_channels:(self.input_channels+self.num_time_features),:, 0].max(2)[0]), dim=1)
             out_gated = torch.mul(self.scaler1, out_gated)  
             #concatenation with bert output
-            out = torch.cat((out_gated, x[:,(self.input_channels+1):, 0, 0]), dim=1 ) 
+            out = torch.cat((out_gated, x[:,(self.input_channels+self.num_time_features):, 0, 0]), dim=1 ) 
         elif self.comb_method=='scaled_concatenation':
-            out_gated = torch.cat((out, x[:, self.input_channels:(self.input_channels+1),:, 0].max(2)[0]), dim=1)
+            out_gated = torch.cat((out, x[:, self.input_channels:(self.input_channels+self.num_time_features),:, 0].max(2)[0]), dim=1)
             out_gated = self.scaler2 * out_gated  
             #concatenation with bert output
-            out = torch.cat((out_gated , x[:,(self.input_channels+1):, 0, 0]) , dim=1 ) 
+            out = torch.cat((out_gated , x[:,(self.input_channels+self.num_time_features):, 0, 0]) , dim=1 ) 
 
-        #FFN: Linear function 1
-        out = self.fc1(out.float())
-        # Non-linearity 1
-        out = self.relu1(out)
-        #Dropout
+        # FFN: input layer
+        out = self.ffn_input_layer(out.float())
+        out = self.relu(out)
         out = self.dropout(out)
+        
+        # FFN: hidden layers    
+        for l in range(1,len(self.hidden_dim_ffn)):
+            out = self.ffn_linear_layers[l-1](out)
+            out = self.ffn_non_linear_layers[l-1](out)
+            out = self.dropout_layers[l-1](out)
 
-        #FFN: Linear function 2
-        out = self.fc2(out)
-        # Non-linearity 2
-        out = self.relu2(out)
-        #Dropout
-        out = self.dropout(out)
+        # FFN: readout
+        out = self.ffn_final_layer(out)
 
-        #FFN: Linear function 3 (readout)
-        out = self.fc3(out)
         return out
         
 ########################
