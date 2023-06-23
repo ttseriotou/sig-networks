@@ -45,7 +45,7 @@ class LSTMModel(nn.Module):
                             hidden_size=hidden_dim,
                             num_layers=num_layers,
                             batch_first=True,
-                            bidirectional=bidirectional).double()
+                            bidirectional=bidirectional)
         self.dropout = nn.Dropout(dropout_rate)
         self.fc = nn.Linear(hidden_dim, output_dim)
     

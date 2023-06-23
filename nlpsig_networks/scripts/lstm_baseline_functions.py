@@ -96,7 +96,7 @@ def implement_lstm(
     set_seed(seed)
     
     # initialise LSTM
-    lstm_model = LSTMModel(input_dim=x_data.shape[1],
+    lstm_model = LSTMModel(input_dim=x_data.shape[2],
                            hidden_dim=hidden_dim,
                            num_layers=num_layers,
                            bidirectional=bidirectional,
@@ -232,12 +232,12 @@ def obtain_path(df: pd.DataFrame,
     # use nlpsig to construct the path as a numpy array
     # first define how we construct the path
     path_specifics = {"pad_by": "history",
-                      "zero_padding": False,
+                      "zero_padding": True,
                       "method": "k_last",
                       "k": k,
                       "time_feature": None,
                       "embeddings": "full",
-                      "include_current_embedding": False}
+                      "include_current_embedding": True}
     
     # obtain path by using PrepareData class and .pad method
     paths = nlpsig.PrepareData(original_df=df,
