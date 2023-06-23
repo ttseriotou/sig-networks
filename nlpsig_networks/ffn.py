@@ -44,7 +44,7 @@ class FeedforwardNeuralNetModel(nn.Module):
         self.linear_layers = []
         self.non_linear_layers = []
         self.dropout_layers = []
-        for l in range(len(self.hidden_dim)):
+        for l in range(1, len(self.hidden_dim)):
             self.linear_layers.append(nn.Linear(input_dim, self.hidden_dim[l]))
             self.non_linear_layers.append(nn.ReLU())
             self.dropout_layers.append(nn.Dropout(dropout_rate))
@@ -64,7 +64,7 @@ class FeedforwardNeuralNetModel(nn.Module):
         out = self.dropout(out)
         
         # FFN: hidden layers    
-        for l in range(len(self.hidden_dim)):
+        for l in range(1, len(self.hidden_dim)):
             out = self.linear_layers[l](out)
             out = self.non_linear_layers[l](out)
             out = self.dropout_layers[l](out)
