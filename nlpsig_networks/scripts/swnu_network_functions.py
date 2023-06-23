@@ -3,7 +3,7 @@ from __future__ import annotations
 import nlpsig
 from nlpsig.classification_utils import DataSplits, Folds
 from nlpsig_networks.pytorch_utils import SaveBestModel, training_pytorch, testing_pytorch, set_seed, KFold_pytorch
-from nlpsig_networks.deepsignet import StackedDeepSigNet
+from nlpsig_networks.snwu_network import SWNUNetwork
 from nlpsig_networks.focal_loss import FocalLoss
 import torch
 import numpy as np
@@ -12,7 +12,7 @@ from tqdm.auto import tqdm
 import os
 
 
-def obtain_SDSN_input(
+def obtain_SWNUNetwork_input(
     method: str,
     dimension: int,
     df: pd.DataFrame,
@@ -20,6 +20,8 @@ def obtain_SDSN_input(
     label_column: str,
     embeddings: np.array,
     k: int,
+    time_feature: list[str] | str | None = None,
+    standardise_method: list[str] | str | None = None,
     seed: int = 42,
     path_indices : list | np.array | None = None
 ) -> tuple[torch.tensor, int]:
@@ -29,7 +31,8 @@ def obtain_SDSN_input(
                       "zero_padding": True,
                       "method": "k_last",
                       "k": k,
-                      "time_feature": None,
+                      "time_feature": time_feature,
+                      "standardise_method": standardise_method,
                       "embeddings": "dim_reduced",
                       "include_current_embedding": True}
     
@@ -57,14 +60,14 @@ def obtain_SDSN_input(
         paths.embeddings = paths.embeddings[path_indices]
         paths.embeddings_reduced = paths.embeddings_reduced[path_indices]
     
-    return paths.get_torch_path_for_SDSN(
+    return paths.get_torch_path_for_SWNUNetwork(
         include_time_features_in_path=True,
         include_time_features_in_input=True,
         include_embedding_in_input=True,
         reduced_embeddings=False
     )
     
-def implement_sdsn(
+def implement_swnu_network(
     num_epochs: int,
     x_data: torch.tensor | np.array,
     y_data: torch.tensor | np.array,
@@ -91,19 +94,19 @@ def implement_sdsn(
     verbose_training: bool = True,
     verbose_results: bool = True,
     verbose_model: bool = False,
-) -> tuple[StackedDeepSigNet, pd.DataFrame]:
+) -> tuple[SWNUNetwork, pd.DataFrame]:
     # set seed
     set_seed(seed)
     
-    # initialise SDSN
-    SDSN_args = {
+    # initialise SWNUNetwork
+    SWNUNetwork_args = {
         "input_channels": input_channels,
         "output_channels": output_channels,
         "num_time_features": num_time_features,
         "embedding_dim": embedding_dim,
         "log_signature": log_signature,
         "sig_depth": sig_depth,
-        "hidden_dim_lstm": lstm_hidden_dim,
+        "hidden_dim_swnu": lstm_hidden_dim,
         "hidden_dim_ffn": ffn_hidden_dim,
         "output_dim": output_dim,
         "dropout_rate": dropout_rate,
@@ -111,10 +114,10 @@ def implement_sdsn(
         "BiLSTM": BiLSTM,
         "comb_method": comb_method
     }
-    sdsn_model = StackedDeepSigNet(**SDSN_args)
+    swnu_network_model = SWNUNetwork(**SWNUNetwork_args)
     
     if verbose_model:
-        print(sdsn_model)
+        print(swnu_network_model)
     
     # convert data to torch tensors
     if not isinstance(x_data, torch.Tensor):
@@ -148,13 +151,13 @@ def implement_sdsn(
             raise ValueError("criterion must be either 'focal' or 'cross_entropy'")
 
         # define optimizer
-        optimizer = torch.optim.Adam(sdsn_model.parameters(), lr=learning_rate)
+        optimizer = torch.optim.Adam(swnu_network_model.parameters(), lr=learning_rate)
         
         # perform k-fold evaluation which returns a dataframe with columns for the
         # loss, accuracy, f1 (macro) and individual f1-scores for each fold
         # (for both validation and test set)
         results = KFold_pytorch(folds=folds,
-                                model=sdsn_model,
+                                model=swnu_network_model,
                                 criterion=criterion,
                                 optimizer=optimizer,
                                 num_epochs=num_epochs,
@@ -177,7 +180,7 @@ def implement_sdsn(
         # define loss
         if loss == "focal":
             criterion = FocalLoss(gamma = gamma)
-            y_train = split_data.get_splits.get_splits(as_DataLoader=False)
+            y_train = split_data.get_splits(as_DataLoader=False)[1]
             criterion.set_alpha_from_y(y=y_train)
         elif loss == "cross_entropy":
             criterion = torch.nn.CrossEntropyLoss()
@@ -185,10 +188,10 @@ def implement_sdsn(
             raise ValueError("criterion must be either 'focal' or 'cross_entropy'")
 
         # define optimizer
-        optimizer = torch.optim.Adam(sdsn_model.parameters(), lr=learning_rate)
+        optimizer = torch.optim.Adam(swnu_network_model.parameters(), lr=learning_rate)
         
         # train FFN
-        sdsn_model = training_pytorch(model=sdsn_model,
+        swnu_network_model = training_pytorch(model=swnu_network_model,
                                       train_loader=train,
                                       criterion=criterion,
                                       optimizer=optimizer,
@@ -203,13 +206,13 @@ def implement_sdsn(
                                       verbose=verbose_training)
         
         # evaluate on validation
-        test_results = testing_pytorch(model=sdsn_model,
+        test_results = testing_pytorch(model=swnu_network_model,
                                        test_loader=test,
                                        criterion=criterion,
                                        verbose=False)
         
         # evaluate on test
-        valid_results = testing_pytorch(model=sdsn_model,
+        valid_results = testing_pytorch(model=swnu_network_model,
                                         test_loader=valid,
                                         criterion=criterion)
         
@@ -230,17 +233,16 @@ def implement_sdsn(
     if os.path.exists(model_output):
         os.remove(model_output)
         
-    return sdsn_model, results
+    return swnu_network_model, results
 
 
-def sdsn_hyperparameter_search(
+def swnu_network_hyperparameter_search(
     num_epochs: int,
     df: pd.DataFrame,
     id_column: str,
     label_column: str,
     embeddings: np.array,
     y_data: np.array,
-    num_time_features: int,
     embedding_dim: int,
     output_dim: int,
     window_sizes: list[int],
@@ -249,7 +251,7 @@ def sdsn_hyperparameter_search(
     sig_depths: list[int],
     log_signature: bool,
     conv_output_channels: list[int],
-    lstm_hidden_dim_sizes: list[int] | list[list[int]],
+    swnu_hidden_dim_sizes: list[int] | list[list[int]],
     ffn_hidden_dim_sizes: list[int] | list[list[int]],
     dropout_rates: list[float],
     learning_rates: list[float],
@@ -257,6 +259,8 @@ def sdsn_hyperparameter_search(
     seeds : list[int],
     loss: str,
     gamma: float = 0.0,
+    time_feature: list[str] | str | None = None,
+    standardise_method: list[str] | str | None = None,
     augmentation_type: str = "Conv1d",
     comb_method: str = "concatenation",
     path_indices : list | np.array | None = None,
@@ -271,7 +275,7 @@ def sdsn_hyperparameter_search(
         raise ValueError("validation_metric must be either 'loss', 'accuracy' or 'f1'")
     
     # initialise SaveBestModel class
-    model_output = "best_sdsn_model.pkl",
+    model_output = "best_swnu_network_model.pkl",
     save_best_model = SaveBestModel(metric=validation_metric,
                                     output=model_output,
                                     verbose=verbose)
@@ -288,7 +292,7 @@ def sdsn_hyperparameter_search(
                 print("\n" + "#" * 50)
                 print(f"dimension: {dimension} | "
                       f"method: {method}")
-                x_data, input_channels = obtain_SDSN_input(
+                x_data, input_channels = obtain_SWNUNetwork_input(
                     method=method,
                     dimension=dimension,
                     df=df,
@@ -296,10 +300,12 @@ def sdsn_hyperparameter_search(
                     label_column=label_column,
                     embeddings=embeddings,
                     k=k,
+                    time_feature=time_feature,
+                    standardise_method=standardise_method,
                     path_indices=path_indices
                 )
         
-                for lstm_hidden_dim in tqdm(lstm_hidden_dim_sizes):
+                for lstm_hidden_dim in tqdm(swnu_hidden_dim_sizes):
                     for ffn_hidden_dim in tqdm(ffn_hidden_dim_sizes):
                         for sig_depth in sig_depths:
                             for output_channels in tqdm(conv_output_channels):
@@ -316,13 +322,13 @@ def sdsn_hyperparameter_search(
                                         scores = []
                                         verbose_model = verbose
                                         for seed in seeds:
-                                            _, results = implement_sdsn(
+                                            _, results = implement_swnu_network(
                                                 num_epochs=num_epochs,
                                                 x_data=x_data,
                                                 y_data=y_data,
                                                 input_channels=input_channels,
                                                 output_channels=output_channels,
-                                                num_time_features=num_time_features,
+                                                num_time_features=len(time_feature),
                                                 embedding_dim=embedding_dim,
                                                 log_signature=log_signature,
                                                 sig_depth=sig_depth,
@@ -356,7 +362,7 @@ def sdsn_hyperparameter_search(
                                             results["method"] = method
                                             results["input_channels"] = input_channels
                                             results["output_channels"] = output_channels
-                                            results["num_time_features"] = num_time_features
+                                            results["num_time_features"] = len(time_feature)
                                             results["embedding_dim"] = embedding_dim
                                             results["log_signature"] = log_signature
                                             results["lstm_hidden_dim"] = [lstm_hidden_dim for _ in range(len(results.index))]
@@ -391,7 +397,7 @@ def sdsn_hyperparameter_search(
                                                             "method": method,
                                                             "input_channels": input_channels,
                                                             "output_channels": output_channels,
-                                                            "num_time_features": num_time_features,
+                                                            "num_time_features": len(time_feature),
                                                             "embedding_dim": embedding_dim,
                                                             "log_signature": log_signature,
                                                             "lstm_hidden_dim": lstm_hidden_dim,
@@ -411,7 +417,7 @@ def sdsn_hyperparameter_search(
         print("The best model had the following parameters:")
         print(checkpoint["extra_info"])
 
-    x_data, input_channels = obtain_SDSN_input(method=checkpoint["extra_info"]["method"],
+    x_data, input_channels = obtain_SWNUNetwork_input(method=checkpoint["extra_info"]["method"],
                                                dimension=checkpoint["extra_info"]["k"],
                                                df=df,
                                                id_column=id_column,
@@ -423,14 +429,14 @@ def sdsn_hyperparameter_search(
     test_scores = []
     test_results_df = pd.DataFrame()
     for seed in seeds:
-        _, test_results = implement_sdsn(
+        _, test_results = implement_swnu_network(
             num_epochs=num_epochs,
             x_data=x_data,
             y_data=y_data,
             sig_depth=checkpoint["extra_info"]["sig_depth"],
             input_channels=checkpoint["extra_info"]["input_channels"],
             output_channels=checkpoint["extra_info"]["output_channels"],
-            num_time_features=num_time_features,
+            num_time_features=len(time_feature),
             embedding_dim=embedding_dim,
             log_signature=checkpoint["extra_info"]["log_signature"],
             output_dim=output_dim,
@@ -464,7 +470,7 @@ def sdsn_hyperparameter_search(
         test_results["method"] = checkpoint["extra_info"]["method"]
         test_results["input_channels"] = checkpoint["extra_info"]["input_channels"]
         test_results["output_channels"] = checkpoint["extra_info"]["output_channels"]
-        test_results["num_time_features"] = num_time_features
+        test_results["num_time_features"] = len(time_feature)
         test_results["embedding_dim"] = embedding_dim
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
         test_results["lstm_hidden_dim"] = [checkpoint["extra_info"]["lstm_hidden_dim"]
