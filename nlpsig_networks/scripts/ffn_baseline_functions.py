@@ -422,45 +422,46 @@ def obtain_mean_history(df: pd.DataFrame,
                         id_column: str,
                         label_column: str,
                         embeddings: np.array,
-                        k: int,
                         path_indices : list | np.array | None = None,
                         concatenate_current: bool = True) -> torch.tensor:
-    # use nlpsig to construct the path as a numpy array
-    # first define how we construct the path
-    path_specifics = {"pad_by": "history",
-                      "zero_padding": False,
-                      "method": "k_last",
-                      "k": k,
-                      "time_feature": None,
-                      "embeddings": "full",
-                      "include_current_embedding": True}
-    
-    # obtain path by using PrepareData class and .pad method
     paths = nlpsig.PrepareData(original_df=df,
                                id_column=id_column,
                                label_column=label_column,
                                embeddings=embeddings)
-    path = paths.pad(**path_specifics)
+    # obtain column names of the embeddings in paths.df
+    colnames = paths._obtain_colnames(embeddings="full")
+    
+    # initialise empty array to store mean history
+    mean_history = np.zeros((len(df.index), len(colnames)))
+    for i in tqdm(range(len(df.index))):
+        # look at particular text at a given index
+        text = paths.df.iloc[i]
+        id = text[id_column]
+        timeline_index = text["timeline_index"]
+
+        # obtain history of the pariicular text
+        history = paths.df[
+            (paths.df[id_column] == id) & (paths.df["timeline_index"] <= timeline_index)
+        ][colnames]
+        
+        mean_history[i] = np.array(history).mean(axis=0)
     
     # slice the path in specified way
     if path_indices is not None:
-        path = path[path_indices]
-
-    # remove last two columns (which contains the id and the label)
-    path = path[:,:,:-2].astype("float")
+        mean_history = mean_history[path_indices]
+        embeddings = embeddings[path_indices]
     
-    # average in the first dimension to pool embeddings in the path
-    path = path.mean(1).astype("float")
+    mean_history = mean_history.astype("float")
     
     # concatenate with current embedding (and convert to torch tensor)
     if concatenate_current:
-        path =  torch.cat([torch.from_numpy(path),
-                           torch.from_numpy(embeddings[path_indices])],
-                          dim=1).float()
+        mean_history =  torch.cat([torch.from_numpy(mean_history),
+                                   torch.from_numpy(embeddings)],
+                                  dim=1).float()
     else:
-        path = torch.from_numpy(path).float()
+        mean_history = torch.from_numpy(mean_history).float()
 
-    return path
+    return mean_history
 
 
 def obtain_signatures_history(method: str,
@@ -506,6 +507,7 @@ def obtain_signatures_history(method: str,
     # slice the path in specified way
     if path_indices is not None:
         path = path[path_indices]
+        embeddings = embeddings[path_indices]
 
     # remove last two columns (which contains the id and the label)
     path = path[:,:,:-2].astype("float")
@@ -519,7 +521,7 @@ def obtain_signatures_history(method: str,
     
     # concatenate with current embedding
     if concatenate_current:
-        sig = torch.cat([sig, torch.from_numpy(embeddings[path_indices])],
+        sig = torch.cat([sig, torch.from_numpy(embeddings)],
                         dim=1)
 
     return sig
