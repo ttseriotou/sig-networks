@@ -264,7 +264,7 @@ def lstm_hyperparameter_search(
     embeddings: np.array,
     y_data: torch.tensor | np.array,
     output_dim: int,
-    window_sizes: list[int],
+    history_lengths: list[int],
     hidden_dim_sizes : list[int],
     num_layers: int,
     bidirectional: bool,
@@ -343,7 +343,7 @@ def lstm_hyperparameter_search(
     # find model parameters that has the best validation
     results_df = pd.DataFrame()
     model_id = 0
-    for k in tqdm(window_sizes):
+    for k in tqdm(history_lengths):
         if verbose:
             print("\n" + "-" * 50)
             print(f"k: {k}")
