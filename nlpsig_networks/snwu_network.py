@@ -2,9 +2,10 @@ from __future__ import annotations
 import signatory
 import torch
 import torch.nn as nn
+from nlpsig_networks.swnu import SWNU
 
 
-class StackedDeepSigNet(nn.Module):
+class SWNUNetwork(nn.Module):
     """
     Stacked Deep Signature Neural Network for classification.
     """
@@ -17,7 +18,7 @@ class StackedDeepSigNet(nn.Module):
         embedding_dim: int,
         log_signature: bool,
         sig_depth: int,
-        hidden_dim_lstm: list[int] | int,
+        hidden_dim_swnu: list[int] | int,
         hidden_dim_ffn: list[int] | int,
         output_dim: int,
         dropout_rate: float,
@@ -28,7 +29,7 @@ class StackedDeepSigNet(nn.Module):
         comb_method: str = "gated_addition",
     ):
         """
-        Stacked Deep Signature Neural Network for classification.
+        SWNU network for classification.
 
         Parameters
         ----------
@@ -40,10 +41,12 @@ class StackedDeepSigNet(nn.Module):
             Number of time features to add to FFN input. If none, set to zero.
         embedding_dim : int
             Dimension of embedding to add to FFN input. If none, set to zero.
+        log_signature : bool
+            Whether or not to use the log signature or standard signature.
         sig_depth : int
             The depth to truncate the path signature at.
-        hidden_dim_lstm : list[int] | int
-            Dimensions of the hidden layers in the LSTM blocks.
+        hidden_dim_swnu : list[int] | int
+            Dimensions of the hidden layers in the SNWU blocks.
         hidden_dim_ffn : list[int] | int
             Dimension of the hidden layers in the FFN.
         output_dim : int
@@ -72,26 +75,10 @@ class StackedDeepSigNet(nn.Module):
             - concatenation: concatenation of path signature and embedding vector
             - gated_addition: element-wise addition of path signature and embedding vector
         """
-        super(StackedDeepSigNet, self).__init__()
+        super(SWNUNetwork, self).__init__()
+        
+        # dimensionality reduction on the input prior to SWNU
         self.input_channels = input_channels
-        
-        if isinstance(hidden_dim_lstm, int):
-            hidden_dim_lstm = [hidden_dim_lstm]
-        if isinstance(hidden_dim_ffn, int):
-            hidden_dim_ffn = [hidden_dim_ffn]
-        self.hidden_dim_lstm = hidden_dim_lstm
-        self.hidden_dim_ffn = hidden_dim_ffn
-        
-        self.embedding_dim = embedding_dim
-        self.num_time_features = num_time_features
-        if comb_method not in ["concatenation", "gated_addition"]:
-            raise ValueError(
-                "`comb_method` must be either 'concatenation' or 'gated_addition'."
-            )
-        self.comb_method = comb_method
-        if augmentation_type not in ["Conv1d", "signatory"]:
-            raise ValueError("`augmentation_type` must be 'Conv1d' or 'signatory'.")
-        
         self.augmentation_type = augmentation_type
         if isinstance(hidden_dim_aug, int):
             hidden_dim_aug = [hidden_dim_aug]
@@ -108,6 +95,7 @@ class StackedDeepSigNet(nn.Module):
             out_channels=output_channels,
             **augmentation_args,
         )
+        # alternative to convolution: using Augment from signatory 
         self.augment = signatory.Augment(
             in_channels=input_channels,
             layer_sizes=self.hidden_dim_aug + [output_channels],
@@ -118,50 +106,37 @@ class StackedDeepSigNet(nn.Module):
         # non-linearity
         self.tanh1 = nn.Tanh()
         
-        self.log_signature = log_signature
-        self.signature_layers = []
-        self.lstm_layers = []
-        for l in range(len(self.hidden_dim_lstm)):
-            if self.log_signature:    
-                self.signature_layers.append(signatory.LogSignature(depth=sig_depth, stream=True))
-                if l == 0:
-                    input_dim_lstm = signatory.logsignature_channels(in_channels=output_channels,
-                                                                     depth=sig_depth)
-                else:
-                    input_dim_lstm = signatory.logsignature_channels(in_channels=self.hidden_dim_lstm[l-1],
-                                                                     depth=sig_depth)
-            else:
-                self.signature_layers.append(signatory.Signature(depth=sig_depth, stream=True))
-                if l == 0:
-                    input_dim_lstm = signatory.signature_channels(channels=output_channels,
-                                                                  depth=sig_depth)
-                else:
-                    input_dim_lstm = signatory.signature_channels(channels=self.hidden_dim_lstm[l-1],
-                                                                  depth=sig_depth)
-            
-            self.lstm_layers.append(nn.LSTM(
-                input_size=input_dim_lstm,
-                hidden_size=self.hidden_dim_lstm[l],
-                num_layers=1,
-                batch_first=True,
-                bidirectional=False if l!=(len(self.hidden_dim_lstm)-1) else BiLSTM,
-            ))
-        
-        self.signature_layers = nn.ModuleList(self.signature_layers)
-        self.lstm_layers = nn.ModuleList(self.lstm_layers)
+        # signature window network unit to obtain feature set for FFN
+        if isinstance(hidden_dim_swnu, int):
+            hidden_dim_swnu = [hidden_dim_swnu]
 
+        self.swnu = SWNU(input_size=output_channels,
+                         hidden_dim=hidden_dim_swnu,
+                         log_signature=log_signature,
+                         sig_depth=sig_depth,
+                         BiLSTM=BiLSTM)
+        
         # signature without lift (for passing into FFN)
         mult = 2 if BiLSTM else 1
-        if self.log_signature:
-            self.signature2 = signatory.LogSignature(depth=sig_depth, stream=False)
+        if log_signature:
             signature_output_channels = signatory.logsignature_channels(
-                in_channels=mult * self.hidden_dim_lstm[-1], depth=sig_depth
+                in_channels=mult * hidden_dim_swnu[-1], depth=sig_depth
             )
         else:
-            self.signature2 = signatory.Signature(depth=sig_depth, stream=False)
             signature_output_channels = signatory.signature_channels(
-                channels=mult * self.hidden_dim_lstm[-1], depth=sig_depth
+                channels=mult * hidden_dim_swnu[-1], depth=sig_depth
             )
+        
+        # determining how to concatenate features to the SWNU features
+        self.embedding_dim = embedding_dim
+        self.num_time_features = num_time_features
+        if comb_method not in ["concatenation", "gated_addition"]:
+            raise ValueError(
+                "`comb_method` must be either 'concatenation' or 'gated_addition'."
+            )
+        self.comb_method = comb_method
+        if augmentation_type not in ["Conv1d", "signatory"]:
+            raise ValueError("`augmentation_type` must be 'Conv1d' or 'signatory'.")
         
         # find dimension of features to pass through FFN
         if self.comb_method == "concatenation":
@@ -185,6 +160,11 @@ class StackedDeepSigNet(nn.Module):
             # non-linearity
             self.tanh2 = nn.Tanh()
 
+        # FFN for classification
+        if isinstance(hidden_dim_ffn, int):
+            hidden_dim_ffn = [hidden_dim_ffn]
+        self.hidden_dim_ffn = hidden_dim_ffn
+        
         # FFN: input layer
         self.ffn_input_layer = nn.Linear(input_dim, self.hidden_dim_ffn[0])
         self.relu = nn.ReLU()
@@ -229,13 +209,8 @@ class StackedDeepSigNet(nn.Module):
             # output has dimensions [batch, length of signal, channels]
             out = self.augment(x[:, :, : self.input_channels])
 
-        # take signature lifts and lstm
-        for l in range(len(self.hidden_dim_lstm)):
-            out = self.signature_layers[l](out)
-            out, _ = self.lstm_layers[l](out)
-        
-        # signature
-        out = self.signature2(out)
+        # use SWNU to obtain feature set
+        out = self.swnu(out)
 
         # combine last post embedding
         if x.shape[2] > self.input_channels:
