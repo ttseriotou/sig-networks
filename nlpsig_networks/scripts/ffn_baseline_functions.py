@@ -542,11 +542,11 @@ def histories_baseline_hyperparameter_search(
     use_signatures: bool,    
     seeds : list[int],
     loss: str,
-    history_lengths: list[int] = [10],
     gamma: float = 0.0,
     log_signature: bool = False,
     dim_reduce_methods: list[str] | None = None,
     dimension_and_sig_depths: list[tuple[int, int]] | None = None,
+    history_lengths: list[int] = [10],
     path_indices : list | np.array | None = None,
     data_split_seed: int = 0,
     k_fold: bool = False,
@@ -704,7 +704,6 @@ def histories_baseline_hyperparameter_search(
                                      id_column=id_column,
                                      label_column=label_column,
                                      embeddings=embeddings,
-                                     k=checkpoint["extra_info"]["k"],
                                      path_indices=path_indices,
                                      concatenate_current=True)
     
@@ -735,7 +734,8 @@ def histories_baseline_hyperparameter_search(
         test_results["loss"] = loss
         test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
-        test_results["k"] = checkpoint["extra_info"]["k"]
+        if use_signatures:
+            test_results["k"] = checkpoint["extra_info"]["k"]
         test_results["input_dim"] = checkpoint["extra_info"]["input_dim"]
         if use_signatures:
             test_results["dimension"] = checkpoint["extra_info"]["dimension"]
