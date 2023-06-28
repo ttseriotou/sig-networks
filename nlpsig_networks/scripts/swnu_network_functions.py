@@ -245,7 +245,7 @@ def swnu_network_hyperparameter_search(
     y_data: np.array,
     embedding_dim: int,
     output_dim: int,
-    window_sizes: list[int],
+    history_lengths: list[int],
     dim_reduce_methods: list[str],
     dimensions: list[int],
     sig_depths: list[int],
@@ -283,7 +283,7 @@ def swnu_network_hyperparameter_search(
     results_df = pd.DataFrame()
     model_id = 0
     
-    for k in tqdm(window_sizes):
+    for k in tqdm(history_lengths):
         if verbose:
             print("\n" + "-" * 50)
             print(f"k: {k}")
