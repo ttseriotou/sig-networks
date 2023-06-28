@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import nlpsig
 from nlpsig.classification_utils import DataSplits, Folds
-from nlpsig_networks.pytorch_utils import SaveBestModel, training_pytorch, testing_pytorch, set_seed, KFold_pytorch
+from nlpsig_networks.pytorch_utils import _get_timestamp, SaveBestModel, training_pytorch, testing_pytorch, set_seed, KFold_pytorch
 from nlpsig_networks.lstm_baseline import LSTMModel
 from nlpsig_networks.focal_loss import FocalLoss
 import torch
@@ -114,9 +114,9 @@ def implement_lstm(
     x_data = x_data.float()
     
     # set some variables for training
-    save_best = True
+    return_best = True
     early_stopping = True
-    model_output = "best_model.pkl"
+    model_output = f"best_model_{_get_timestamp()}.pkl"
     validation_metric = "f1"
     patience = 10
     
@@ -149,7 +149,7 @@ def implement_lstm(
                                 optimizer=optimizer,
                                 num_epochs=num_epochs,
                                 seed=seed,
-                                save_best=save_best,
+                                return_best=return_best,
                                 early_stopping=early_stopping,
                                 patience=patience,
                                 verbose=verbose_training)
@@ -184,7 +184,7 @@ def implement_lstm(
                                       num_epochs=num_epochs,
                                       valid_loader=valid,
                                       seed=seed,
-                                      save_best=save_best,
+                                      return_best=return_best,
                                       output=model_output,
                                       early_stopping=early_stopping,
                                       validation_metric=validation_metric,
@@ -335,7 +335,7 @@ def lstm_hyperparameter_search(
         raise ValueError("validation_metric must be either 'loss', 'accuracy' or 'f1'")
     
     # initialise SaveBestModel class
-    model_output = "best_lstm_model.pkl"
+    model_output = f"best_lstm_model_{_get_timestamp()}.pkl"
     save_best_model = SaveBestModel(metric=validation_metric,
                                     output=model_output,
                                     verbose=verbose)
