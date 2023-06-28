@@ -27,7 +27,7 @@ class SeqSigNet(nn.Module):
         """
         SeqSigNet network for classification.
         
-        Input data will have the size: [batch size, all embedding dimensions (history + time + post), window size (w), unit size (n)]
+        Input data will have the size: [batch size, window size (w), all embedding dimensions (history + time + post), unit size (n)]
         Note: unit sizes will be in reverse chronological order, starting from the more recent and ending with the one further back in time.
         
         Parameters
@@ -199,13 +199,13 @@ class SeqSigNet(nn.Module):
     def _unit_swnu(self,u):
         
         # convolution
-        #u has dimensions [batch size, embedding size, #posts (length of signal)]
+        #u has dimensions [batch size, #posts (length of signal), embedding size]
         if self.augmentation_type == "Conv1d":
-            out = self.conv(u) #get only the path information
+            out = torch.transpose(u, 1, 2)
+            out = self.conv(out) 
             out = self.tanh1(out)
             out = torch.transpose(out, 1,2) #swap dimensions
         elif self.augmentation_type == "signatory":
-            out = torch.transpose(u, 1,2)
             out = self.augment(out)
        
         # use SWNU to obtain feature set
@@ -214,46 +214,41 @@ class SeqSigNet(nn.Module):
 
         return out
 
-    def forward(self, x):
-       
+    def forward(self, x):       
         #SWNU for each history window
-        out = self._unit_swnu(x[:,:self.input_channels, :, 0])
+        out = self._unit_swnu(x[:,:, :self.input_channels, 0])
         out = out.unsqueeze(1)
         for window in range(1,x.shape[3]):
-            out_unit = self._unit_swnu(x[:,:self.input_channels, :, window])
+            out_unit = self._unit_swnu(x[:,:,:self.input_channels,window])
             out_unit = out_unit.unsqueeze(1)
             out = torch.cat((out, out_unit), dim=1)
         
         #order sequences based on sequence length of input
-        #seq_lengths = torch.sum(torch.sum(x[:, :self.input_channels, 0, :] != 0, 1) != 0 , 1)
-        seq_lengths = torch.sum(torch.sum(torch.sum(x[:, :self.input_channels, :, :], 2) != 0, 1) != 0 , 1)
+        seq_lengths = torch.sum(torch.sum(torch.sum(x[:, :, :self.input_channels, :], 1) != 0, 1) != 0 , 1)
         seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
         out = out[perm_idx]
         out = torch.nn.utils.rnn.pack_padded_sequence(out, seq_lengths, batch_first=True)
-        
         
         #BiLSTM that combines all deepsignet windows together
         _, (out, _) = self.lstm_sig2(out)
         out = out[-1, :, :] + out[-2, :, :]
         
-        
         #reverse sequence padding
         inverse_perm = np.argsort(perm_idx)
         out = out[inverse_perm]
         
-       
         #Combine Time Features and Last Post Embedding
         if self.comb_method=='concatenation':
             if self.num_time_features > 0:
                 # concatenate any time features
-                out = torch.cat((out, x[:, self.input_channels:(self.input_channels+self.num_time_features),:, 0].max(2)[0]), dim=1)
+                out = torch.cat((out, x[:, :, self.input_channels:(self.input_channels+self.num_time_features), 0].max(1)[0]), dim=1)
             if self.embedding_dim > 0:
                 # concatenate current post embedding if provided
-                out = torch.cat((out, x[:,(self.input_channels+self.num_time_features):, 0, 0]), dim=1)
+                out = torch.cat((out, x[:,0,(self.input_channels+self.num_time_features):, 0]), dim=1)
         elif self.comb_method=='gated_addition':
             if self.num_time_features > 0:
                 # concatenate any time features
-                out_gated = torch.cat((out, x[:, self.input_channels:(self.input_channels+self.num_time_features),:, 0].max(2)[0]), dim=1)
+                out_gated = torch.cat((out, x[:, :, self.input_channels:(self.input_channels+self.num_time_features),0].max(1)[0]), dim=1)
             else:
                 out_gated = out
             out_gated = self.fc_scale(out_gated.float())
@@ -261,31 +256,31 @@ class SeqSigNet(nn.Module):
             out_gated = torch.mul(self.scaler, out_gated)
             if self.embedding_dim > 0:
                 # add current post embedding if provided
-                out = out_gated + x[:,(self.input_channels+self.num_time_features):, 0]
+                out = out_gated + x[:,0,(self.input_channels+self.num_time_features):, 0] 
             else:
                 out = out_gated
         elif self.comb_method=='gated_concatenation':
             if self.num_time_features > 0:
                 # concatenate any time features
-                out_gated = torch.cat((out, x[:, self.input_channels:(self.input_channels+self.num_time_features),:, 0].max(2)[0]), dim=1)
+                out_gated = torch.cat((out, x[:, :, self.input_channels:(self.input_channels+self.num_time_features), 0].max(1)[0]), dim=1)
             else:
                 out_gated = out
             out_gated = torch.mul(self.scaler1, out_gated) 
             if self.embedding_dim > 0:
                 # add current post embedding if provided 
-                out = torch.cat((out_gated, x[:,(self.input_channels+self.num_time_features):, 0, 0]), dim=1 )
+                out = torch.cat((out_gated, x[:, 0, (self.input_channels+self.num_time_features):, 0]), dim=1 )
             else:
                 out = out_gated 
         elif self.comb_method=='scaled_concatenation':
             if self.num_time_features > 0:
                 # concatenate any time features
-                out_gated = torch.cat((out, x[:, self.input_channels:(self.input_channels+self.num_time_features),:, 0].max(2)[0]), dim=1)
+                out_gated = torch.cat((out, x[:, :, self.input_channels:(self.input_channels+self.num_time_features), 0].max(1)[0]), dim=1)
             else:
                 out_gated = out
             out_gated = self.scaler2 * out_gated  
             if self.embedding_dim > 0:
                 # add current post embedding if provided 
-                out = torch.cat((out_gated , x[:,(self.input_channels+self.num_time_features):, 0, 0]) , dim=1 ) 
+                out = torch.cat((out_gated , x[:,0, (self.input_channels+self.num_time_features):, 0]) , dim=1 ) 
             else:
                 out = out_gated
         
