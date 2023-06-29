@@ -62,7 +62,7 @@ class SeqSigNet(nn.Module):
             Method of augmenting the path, by default "Conv1d".
             Options are:
             - "Conv1d": passes path through 1D convolution layer.
-            - else: passes path through `Augment` layer from `signatory` package.
+            - "signatory": passes path through `Augment` layer from `signatory` package.
         hidden_dim_aug: list[int] | int | None = ()
             Dimensions of the hidden layers in the augmentation layer.
             Passed into `Augment` class from `signatory` package if
