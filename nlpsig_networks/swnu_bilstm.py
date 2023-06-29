@@ -2,6 +2,7 @@ from __future__ import annotations
 import signatory
 import torch
 import torch.nn as nn
+import numpy as np
 from nlpsig_networks.swnu import SWNU
 from nlpsig_networks.ffn_baseline import FeedforwardNeuralNetModel
 
