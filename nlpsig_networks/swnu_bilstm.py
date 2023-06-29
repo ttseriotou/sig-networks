@@ -84,6 +84,7 @@ class SeqSigNet(nn.Module):
         
         self.embedding_dim = embedding_dim #384
         self.num_time_features = num_time_features
+        self.input_channels = input_channels
         
         if comb_method not in ["concatenation", "gated_addition", "gated_concatenation", "scaled_concatenation"]:
             raise ValueError(
@@ -160,29 +161,12 @@ class SeqSigNet(nn.Module):
                                              output_dim=output_dim,
                                              dropout_rate=dropout_rate)
 
-    def _unit_swnu(self,u):
-        # convolution
-        # u has dimensions [batch size, #posts (length of signal), embedding size]
-        if self.augmentation_type == "Conv1d":
-            out = torch.transpose(u, 1, 2)
-            out = self.conv(out) 
-            out = self.tanh1(out)
-            out = torch.transpose(out, 1,2) #swap dimensions
-        elif self.augmentation_type == "signatory":
-            out = self.augment(out)
-       
-        # use SWNU to obtain feature set
-        # out has dimensions [batch size, #posts (length of signal), embedding size]
-        out = self.swnu(out)
-
-        return out
-
     def forward(self, x):       
         # SWNU for each history window
-        out = self._unit_swnu(x[:,:, :self.input_channels, 0])
+        out = self.swnu(x[:,:,: self.input_channels, 0])
         out = out.unsqueeze(1)
         for window in range(1,x.shape[3]):
-            out_unit = self._unit_swnu(x[:,:,:self.input_channels,window])
+            out_unit = self.swnu(x[:,:,: self.input_channels,window])
             out_unit = out_unit.unsqueeze(1)
             out = torch.cat((out, out_unit), dim=1)
         
@@ -248,6 +232,6 @@ class SeqSigNet(nn.Module):
                 out = out_gated
         
         # FFN
-        out = self.ffm(out)
+        out = self.ffn(out.float())
 
         return out

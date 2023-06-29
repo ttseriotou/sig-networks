@@ -74,7 +74,7 @@ class SWLSTM(nn.Module):
                 num_layers=1,
                 batch_first=True,
                 bidirectional=False if l!=(len(self.hidden_dim)-1) else self.BiLSTM,
-            ))
+            ).double())
         
         # make a ModuleList from the signatures and LSTM layers
         self.signature_layers = nn.ModuleList(self.signature_layers)
@@ -92,14 +92,34 @@ class SWLSTM(nn.Module):
         # take signature lifts and lstm
         for l in range(len(self.hidden_dim)):
             x = self.signature_layers[l](x)
-            if self.BiLSTM and (l == len(self.hidden_dim)-1):
+
+            #pad for lstm
+            stream_dim = x.shape[1]
+            lstm_u = torch.sum(x, 2)
+            lstm_u_shift = torch.roll(lstm_u, shifts=1, dims=1)
+            lstm_u_shift[:,0] = -100
+            seq_lengths = torch.sum(torch.eq(lstm_u, lstm_u_shift) == False, 1)
+
+            seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
+            x = x[perm_idx]
+            x = torch.nn.utils.rnn.pack_padded_sequence(x, seq_lengths, batch_first=True)
+            
+            #LSTM
+            x, _ = self.lstm_layers[l](x)
+            
+            #reverse soring of sequences
+            x, _ = torch.nn.utils.rnn.pad_packed_sequence(x, batch_first=True)
+            inverse_perm = np.argsort(perm_idx)
+            x = x[inverse_perm]
+            #case of last LSTM being Bidirectional
+            if ((self.BiLSTM) & (l==(len(self.hidden_dim)-1))) :
                 # using BiLSTM on the last layer - need to add element-wise
                 # the forward and backward LSTM states
-                x, _ = self.lstm_layers[l](x)
-                x = x[:,:,self.hidden_dim[l]:] + x[:,:,:self.hidden_dim[l]]
-            else:
-                x, _ = self.lstm_layers[l](x)
-        
+                x = x[:, :, :self.hidden_dim[l]] + x[:, :, self.hidden_dim[l]:]
+            #handle error in cases of empty units
+            if (x.shape[1] == 1):
+                x = x.repeat(1,stream_dim,1)
+
         # take final signature
         out = self.signature2(x)
         
@@ -150,6 +170,8 @@ class SWNU(nn.Module):
             Whether or not a birectional LSTM is used,
             by default False (unidirectional LSTM is used in this case).
         """
+        super(SWNU, self).__init__()
+
         self.input_channels = input_channels
         self.output_channels = output_channels
         self.log_signature = log_signature
@@ -177,7 +199,7 @@ class SWNU(nn.Module):
             kernel_size=3,
             stride=1, 
             padding=1,
-        )
+        ).double()
         
         # alternative to convolution: using Augment from signatory 
         self.augment = Augment(
@@ -188,7 +210,7 @@ class SWNU(nn.Module):
             kernel_size=3,
             stride=1, 
             padding=1,
-        )
+        ).double()
         
         # non-linearity
         self.tanh = nn.Tanh()
@@ -220,7 +242,7 @@ class SWNU(nn.Module):
             # and get only the path information
             # output has dimensions [batch, length of signal, channels]
             out = self.augment(x[:, :, : self.input_channels])
-        
-        out = self.swlstm(x)
+
+        out = self.swlstm(out)
         
         return out
