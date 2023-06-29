@@ -3,6 +3,7 @@ import signatory
 import torch
 import torch.nn as nn
 from nlpsig_networks.swnu import SWNU
+from nlpsig_networks.ffn_baseline import FeedforwardNeuralNetModel
 
 
 class SWNUNetwork(nn.Module):
@@ -23,7 +24,6 @@ class SWNUNetwork(nn.Module):
         output_dim: int,
         dropout_rate: float,
         augmentation_type: str = "Conv1d",
-        augmentation_args: dict | None = None,
         hidden_dim_aug: list[int] | int | None = None,
         BiLSTM: bool = False,
         comb_method: str = "gated_addition",
@@ -58,9 +58,6 @@ class SWNUNetwork(nn.Module):
             Options are:
             - "Conv1d": passes path through 1D convolution layer.
             - "signatory": passes path through `Augment` layer from `signatory` package.
-        augmentation_args : dict | None, optional
-            Arguments to pass into `torch.Conv1d` or `signatory.Augment`, by default None.
-            If None, by default will set `kernel_size=3`, `stride=1`, `padding=0`.
         hidden_dim_aug : list[int] | int | None
             Dimensions of the hidden layers in the augmentation layer.
             Passed into `Augment` class from `signatory` package if
@@ -85,15 +82,13 @@ class SWNUNetwork(nn.Module):
         elif hidden_dim_aug is None:
             hidden_dim_aug = []
         self.hidden_dim_aug = hidden_dim_aug
-        if augmentation_args is None:
-            augmentation_args = {"kernel_size": 3,
-                                 "stride": 1,
-                                 "padding": 1}
         # convolution
         self.conv = nn.Conv1d(
             in_channels=input_channels,
             out_channels=output_channels,
-            **augmentation_args,
+            kernel_size=3,
+            stride=1, 
+            padding=1,
         )
         # alternative to convolution: using Augment from signatory 
         self.augment = signatory.Augment(
@@ -101,7 +96,9 @@ class SWNUNetwork(nn.Module):
             layer_sizes=self.hidden_dim_aug + [output_channels],
             include_original=False,
             include_time=False,
-            **augmentation_args,
+            kernel_size=3,
+            stride=1, 
+            padding=1,
         )
         # non-linearity
         self.tanh1 = nn.Tanh()
@@ -161,32 +158,15 @@ class SWNUNetwork(nn.Module):
             self.tanh2 = nn.Tanh()
 
         # FFN for classification
+        # make sure hidden_dim_ffn a list of integers
         if isinstance(hidden_dim_ffn, int):
             hidden_dim_ffn = [hidden_dim_ffn]
         self.hidden_dim_ffn = hidden_dim_ffn
         
-        # FFN: input layer
-        self.ffn_input_layer = nn.Linear(input_dim, self.hidden_dim_ffn[0])
-        self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(dropout_rate)
-        input_dim = self.hidden_dim_ffn[0]
-        
-        # FFN: hidden layers
-        self.ffn_linear_layers = []
-        self.ffn_non_linear_layers = []
-        self.dropout_layers = []
-        for l in range(len(self.hidden_dim_ffn)):
-            self.ffn_linear_layers.append(nn.Linear(input_dim, self.hidden_dim_ffn[l]))
-            self.ffn_non_linear_layers.append(nn.ReLU())
-            self.dropout_layers.append(nn.Dropout(dropout_rate))
-            input_dim = self.hidden_dim_ffn[l]
-        
-        self.ffn_linear_layers = nn.ModuleList(self.ffn_linear_layers)
-        self.ffn_non_linear_layers = nn.ModuleList(self.ffn_non_linear_layers)
-        self.dropout_layers = nn.ModuleList(self.dropout_layers)
-        
-        # FFN: readout
-        self.ffn_final_layer = nn.Linear(input_dim, output_dim)
+        self.ffn = FeedforwardNeuralNetModel(input_dim=input_dim,
+                                             hidden_dim=self.hidden_dim_ffn,
+                                             output_dim=output_dim,
+                                             dropout_rate=dropout_rate)
 
     def forward(self, x: torch.Tensor):
         # x has dimensions [batch, length of signal, channels]
@@ -271,18 +251,7 @@ class SWNUNetwork(nn.Module):
                 else:
                     out = out_gated
 
-        # FFN: input layer
-        out = self.ffn_input_layer(out)
-        out = self.relu(out)
-        out = self.dropout(out)
-        
-        # FFN: hidden layers    
-        for l in range(len(self.hidden_dim_ffn)):
-            out = self.ffn_linear_layers[l](out)
-            out = self.ffn_non_linear_layers[l](out)
-            out = self.dropout_layers[l](out)
-
-        # FFN: readout
-        out = self.ffn_final_layer(out)
+        # FFN
+        out = self.ffm(out)
 
         return out
