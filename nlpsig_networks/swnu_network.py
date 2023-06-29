@@ -74,54 +74,24 @@ class SWNUNetwork(nn.Module):
         """
         super(SWNUNetwork, self).__init__()
         
-        # dimensionality reduction on the input prior to SWNU
-        self.input_channels = input_channels
-        self.augmentation_type = augmentation_type
-        if isinstance(hidden_dim_aug, int):
-            hidden_dim_aug = [hidden_dim_aug]
-        elif hidden_dim_aug is None:
-            hidden_dim_aug = []
-        self.hidden_dim_aug = hidden_dim_aug
-        # convolution
-        self.conv = nn.Conv1d(
-            in_channels=input_channels,
-            out_channels=output_channels,
-            kernel_size=3,
-            stride=1, 
-            padding=1,
-        )
-        # alternative to convolution: using Augment from signatory 
-        self.augment = signatory.Augment(
-            in_channels=input_channels,
-            layer_sizes=self.hidden_dim_aug + [output_channels],
-            include_original=False,
-            include_time=False,
-            kernel_size=3,
-            stride=1, 
-            padding=1,
-        )
-        # non-linearity
-        self.tanh1 = nn.Tanh()
-        
-        # signature window network unit to obtain feature set for FFN
-        if isinstance(hidden_dim_swnu, int):
-            hidden_dim_swnu = [hidden_dim_swnu]
-
-        self.swnu = SWNU(input_size=output_channels,
-                         hidden_dim=hidden_dim_swnu,
+        self.swnu = SWNU(input_channels=input_channels,
+                         output_channels=output_channels,
                          log_signature=log_signature,
                          sig_depth=sig_depth,
+                         hidden_dim=hidden_dim_swnu,
+                         augmentation_type=augmentation_type,
+                         hidden_dim_aug=hidden_dim_aug,
                          BiLSTM=BiLSTM)
         
         # signature without lift (for passing into FFN)
         mult = 2 if BiLSTM else 1
         if log_signature:
             signature_output_channels = signatory.logsignature_channels(
-                in_channels=mult * hidden_dim_swnu[-1], depth=sig_depth
+                in_channels=mult * self.swnu.hidden_dim[-1], depth=sig_depth
             )
         else:
             signature_output_channels = signatory.signature_channels(
-                channels=mult * hidden_dim_swnu[-1], depth=sig_depth
+                channels=mult * self.swnu.hidden_dim[-1], depth=sig_depth
             )
         
         # determining how to concatenate features to the SWNU features
@@ -155,7 +125,7 @@ class SWNUNetwork(nn.Module):
                 self.fc_scale = nn.Linear(input_gated_linear, input_gated_linear)
                 self.scaler = torch.nn.Parameter(torch.zeros(1, input_gated_linear))
             # non-linearity
-            self.tanh2 = nn.Tanh()
+            self.tanh = nn.Tanh()
 
         # FFN for classification
         # make sure hidden_dim_ffn a list of integers
@@ -170,25 +140,6 @@ class SWNUNetwork(nn.Module):
 
     def forward(self, x: torch.Tensor):
         # x has dimensions [batch, length of signal, channels]
-
-        # convolution
-        if self.augmentation_type == "Conv1d":
-            # input has dimensions [batch, length of signal, channels]
-            # swap dimensions to get [batch, channels, length of signal]
-            # (nn.Conv1d expects this)
-            out = torch.transpose(x, 1, 2)
-            # get only the path information
-            out = self.conv(out[:, : self.input_channels, :])
-            out = self.tanh1(out)
-            # make output have dimensions [batch, length of signal, channels]
-            out = torch.transpose(out, 1, 2)
-        elif self.augmentation_type == "signatory":
-            # input has dimensions [batch, length of signal, channels]
-            # (signatory.Augment expects this)
-            # and get only the path information
-            # output has dimensions [batch, length of signal, channels]
-            out = self.augment(x[:, :, : self.input_channels])
-
         # use SWNU to obtain feature set
         out = self.swnu(out)
 
@@ -240,7 +191,7 @@ class SWNUNetwork(nn.Module):
                 else:
                     out_gated = out
                 out_gated = self.fc_scale(out_gated.float())
-                out_gated = self.tanh2(out_gated)
+                out_gated = self.tanh(out_gated)
                 out_gated = torch.mul(self.scaler, out_gated)
                 if x.shape[2] > self.input_channels + self.num_time_features:
                     # concatenate current post embedding if provided

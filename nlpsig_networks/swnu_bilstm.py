@@ -84,20 +84,7 @@ class SeqSigNet(nn.Module):
         
         self.embedding_dim = embedding_dim #384
         self.num_time_features = num_time_features
-        self.input_channels = input_channels
-
-        if isinstance(hidden_dim_aug, int):
-            hidden_dim_aug = [hidden_dim_aug]
-        elif hidden_dim_aug is None:
-            hidden_dim_aug = []
-        elif (hidden_dim_aug == ()):
-            hidden_dim_aug = []
-        self.hidden_dim_aug = hidden_dim_aug
-
-        if augmentation_type not in ["Conv1d", "signatory"]:
-            raise ValueError("`augmentation_type` must be 'Conv1d' or 'signatory'.")
-        self.augmentation_type = augmentation_type
-
+        
         if comb_method not in ["concatenation", "gated_addition", "gated_concatenation", "scaled_concatenation"]:
             raise ValueError(
                 "`comb_method` must be either 'concatenation' or 'gated_addition' "
@@ -105,47 +92,28 @@ class SeqSigNet(nn.Module):
             )
         self.comb_method = comb_method
 
-        # convolution
-        self.conv = nn.Conv1d(
-            in_channels=input_channels,
-            out_channels=output_channels,
-            kernel_size=3,
-            stride=1, 
-            padding=1
-        ).double()
-
-        # alternative to convolution: using Augment from signatory 
-        self.augment = signatory.Augment(
-            in_channels=input_channels,
-            layer_sizes = self.hidden_dim_aug + [output_channels],
-            kernel_size=3,
-            padding=1,
-            stride=1,
-            include_original=False,
-            include_time=False
-        ).double()
-
-        # Non-linearity
-        self.tanh1 = nn.Tanh()
- 
-        # signature window network unit to obtain feature set for FFN
-        if isinstance(hidden_dim_swnu, int):
-            hidden_dim_swnu = [hidden_dim_swnu]
-        
-        # Signatures and LSTMs for signature windows
-        self.swnu = SWNU(input_size=output_channels,
-                         hidden_dim=hidden_dim_swnu,
+        self.swnu = SWNU(input_channels=input_channels,
+                         output_channels=output_channels,
                          log_signature=log_signature,
                          sig_depth=sig_depth,
-                         BiLSTM=BiLSTM).double()
-    
-        # signature without lift (for passing into BiLSTM)
-        if log_signature:
-            input_dim_lstmsig = signatory.logsignature_channels(in_channels=hidden_dim_swnu[-1], depth=sig_depth)
-        else:
-            input_dim_lstmsig = signatory.signature_channels(in_channels=hidden_dim_swnu[-1], depth=sig_depth)
-
+                         hidden_dim=hidden_dim_swnu,
+                         augmentation_type=augmentation_type,
+                         hidden_dim_aug=hidden_dim_aug,
+                         BiLSTM=BiLSTM)
+            
         # BiLSTM
+        # compute the input dimension
+        if log_signature:
+            input_dim_lstmsig = signatory.logsignature_channels(
+                in_channels=self.swnu.hidden_dim[-1], 
+                depth=sig_depth
+            )
+        else:
+            input_dim_lstmsig = signatory.signature_channels(
+                in_channels=self.swnu.hidden_dim[-1],
+                depth=sig_depth
+            )
+        
         self.lstm_sig2 = nn.LSTM(input_size=input_dim_lstmsig,
                                  hidden_size=hidden_dim_lstm,
                                  num_layers=1,
@@ -169,7 +137,7 @@ class SeqSigNet(nn.Module):
                 #input dimensions for FFN
                 input_dim = input_gated_linear
             # non-linearity
-            self.tanh2 = nn.Tanh()
+            self.tanh = nn.Tanh()
         elif comb_method=='gated_concatenation':
             # input dimensions for FFN
             input_dim = hidden_dim_lstm + self.embedding_dim + self.num_time_features
@@ -247,7 +215,7 @@ class SeqSigNet(nn.Module):
             else:
                 out_gated = out
             out_gated = self.fc_scale(out_gated.float())
-            out_gated = self.tanh2(out_gated)
+            out_gated = self.tanh(out_gated)
             out_gated = torch.mul(self.scaler, out_gated)
             if self.embedding_dim > 0:
                 # add current post embedding if provided
