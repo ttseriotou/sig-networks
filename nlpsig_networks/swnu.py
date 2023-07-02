@@ -2,7 +2,7 @@ from __future__ import annotations
 from signatory import Signature, LogSignature, signature_channels, logsignature_channels, Augment
 import torch
 import torch.nn as nn
-
+import numpy as np
 
 class SWLSTM(nn.Module):
     """
@@ -74,7 +74,7 @@ class SWLSTM(nn.Module):
                 num_layers=1,
                 batch_first=True,
                 bidirectional=False if l!=(len(self.hidden_dim)-1) else self.BiLSTM,
-            ).double())
+            ))
         
         # make a ModuleList from the signatures and LSTM layers
         self.signature_layers = nn.ModuleList(self.signature_layers)
@@ -199,7 +199,7 @@ class SWNU(nn.Module):
             kernel_size=3,
             stride=1, 
             padding=1,
-        ).double()
+        )
         
         # alternative to convolution: using Augment from signatory 
         self.augment = Augment(
@@ -210,7 +210,7 @@ class SWNU(nn.Module):
             kernel_size=3,
             stride=1, 
             padding=1,
-        ).double()
+        )
         
         # non-linearity
         self.tanh = nn.Tanh()

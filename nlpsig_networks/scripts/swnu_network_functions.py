@@ -3,7 +3,7 @@ from __future__ import annotations
 import nlpsig
 from nlpsig.classification_utils import DataSplits, Folds
 from nlpsig_networks.pytorch_utils import SaveBestModel, training_pytorch, testing_pytorch, set_seed, KFold_pytorch
-from nlpsig_networks.snwu_network import SWNUNetwork
+from nlpsig_networks.swnu_network import SWNUNetwork
 from nlpsig_networks.focal_loss import FocalLoss
 import torch
 import numpy as np

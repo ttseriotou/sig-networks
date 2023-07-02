@@ -26,7 +26,7 @@ class SWNUNetwork(nn.Module):
         augmentation_type: str = "Conv1d",
         hidden_dim_aug: list[int] | int | None = None,
         BiLSTM: bool = False,
-        comb_method: str = "gated_addition",
+        comb_method: str = "concatenation",
     ):
         """
         SWNU network for classification.
