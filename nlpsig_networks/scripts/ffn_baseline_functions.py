@@ -600,7 +600,7 @@ def histories_baseline_hyperparameter_search(
                     )
 
                     # perform hyperparameter search for FFN
-                    results, best_valid_metric, FFN_info = ffn_hyperparameter_search(
+                    results, _, best_valid_metric, FFN_info = ffn_hyperparameter_search(
                         num_epochs=num_epochs,
                         x_data=x_data,
                         y_data=y_data,

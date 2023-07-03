@@ -282,6 +282,9 @@ def swnu_network_hyperparameter_search(
     
     results_df = pd.DataFrame()
     model_id = 0
+
+    if isinstance(time_feature, str):
+        time_feature = [time_feature]
     
     for k in tqdm(history_lengths):
         if verbose:
