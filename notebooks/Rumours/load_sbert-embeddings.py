@@ -3,9 +3,11 @@ import numpy as np
 import pandas as pd
 import re
 import torch
+import os
 
 #read data
-sbert_file = '/storage/ttseriotou/rumour_eval/data/longrumoureval_sbert/sbert.pkl'
+cwd = os.getcwd()
+sbert_file = cwd+'/notebooks/Rumours/sbert.pkl'
 with open(sbert_file,'rb') as g:
     emb_data = pickle.load(g)
 

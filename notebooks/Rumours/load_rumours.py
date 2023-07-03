@@ -9,8 +9,9 @@ import torch
 ########## Load in data ##########################
 ##################################################
 
-# load in data
-data_path = '/storage/ttseriotou/rumour_eval/data/conversations.json'
+# load in data 
+cwd = os.getcwd()
+data_path = cwd+'/notebooks/Rumours/conversations.json'
 with open(data_path,'r') as f:
   data = json.load(f)
 
