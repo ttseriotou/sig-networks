@@ -26,7 +26,7 @@ def embedding_df(emb_data):
         
     df_emb = pd.DataFrame(row_list)               
     df_emb.columns =['id', 'subset']+ ['e' + str(i+1) for i in range(emb_data['train'][0]['replies'][0]['emb'].shape[0])]
-    df_emb['id'] = df_emb['id'].astype('float')
+    df_emb['id'] = df_emb['id'].astype('float64')
     df_emb[[c for c in df_emb.columns if re.match("^e\w*[0-9]", c)]]= df_emb[[c for c in df_emb.columns if re.match("^e\w*[0-9]", c)]].astype('float')
 
     df_emb = df_emb.reset_index(drop=True)
@@ -34,5 +34,12 @@ def embedding_df(emb_data):
     return df_emb
 
 df_emb = embedding_df(emb_data)
+
+#ALIGN THE EMBEDDINGS WITH THE RUMOUR TWEETS BY ID
+with open("notebooks/Rumours/load_rumours.py") as f:
+    exec(f.read()) 
+
+df_emb = df_rumours[['id']].merge(df_emb, on="id", how="left")
+df_emb = df_emb.reset_index(drop=True)
 
 sbert_embeddings = torch.tensor(df_emb[[c for c in df_emb.columns if re.match("^e\w*[0-9]", c)]].values)
