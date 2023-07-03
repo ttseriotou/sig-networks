@@ -22,6 +22,7 @@ def obtain_SWNUNetwork_input(
     k: int,
     time_feature: list[str] | str | None = None,
     standardise_method: list[str] | str | None = None,
+    add_time_in_path: bool = False,
     seed: int = 42,
     path_indices : list | np.array | None = None
 ) -> tuple[torch.tensor, int]:
@@ -61,7 +62,7 @@ def obtain_SWNUNetwork_input(
         paths.embeddings_reduced = paths.embeddings_reduced[path_indices]
     
     return paths.get_torch_path_for_SWNUNetwork(
-        include_time_features_in_path=True,
+        include_time_features_in_path=add_time_in_path,
         include_time_features_in_input=True,
         include_embedding_in_input=True,
         reduced_embeddings=False
@@ -264,6 +265,7 @@ def swnu_network_hyperparameter_search(
     gamma: float = 0.0,
     time_feature: list[str] | str | None = None,
     standardise_method: list[str] | str | None = None,
+    add_time_in_path: bool = False,
     augmentation_type: str = "Conv1d",
     hidden_dim_aug: list[int] | int | None = None,
     comb_method: str = "concatenation",
@@ -310,6 +312,7 @@ def swnu_network_hyperparameter_search(
                     k=k,
                     time_feature=time_feature,
                     standardise_method=standardise_method,
+                    add_time_in_path= add_time_in_path,
                     path_indices=path_indices
                 )
         
@@ -385,7 +388,7 @@ def swnu_network_hyperparameter_search(
                                             results["gamma"] = gamma
                                             results["k_fold"] = k_fold
                                             results["augmentation_type"] = augmentation_type
-                                            results["hidden_dim_aug"] = hidden_dim_aug
+                                            results["hidden_dim_aug"] = [hidden_dim_aug for _ in range(len(results.index))]
                                             results["comb_method"] = comb_method
                                             results["model_id"] = model_id
                                             results_df = pd.concat([results_df, results])
