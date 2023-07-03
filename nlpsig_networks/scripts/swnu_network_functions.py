@@ -87,10 +87,12 @@ def implement_swnu_network(
     loss: str,
     gamma: float = 0.0,
     augmentation_type: str = "Conv1d",
+    hidden_dim_aug: list[int] | int | None = None,
     comb_method: str = "concatenation",
     data_split_seed: int = 0,
     k_fold: bool = False,
     n_splits: int = 5,
+    patience: int = 10,
     verbose_training: bool = True,
     verbose_results: bool = True,
     verbose_model: bool = False,
@@ -111,6 +113,7 @@ def implement_swnu_network(
         "output_dim": output_dim,
         "dropout_rate": dropout_rate,
         "augmentation_type": augmentation_type,
+        "hidden_dim_aug": hidden_dim_aug,
         "BiLSTM": BiLSTM,
         "comb_method": comb_method
     }
@@ -131,7 +134,7 @@ def implement_swnu_network(
     early_stopping = True
     model_output = "best_model.pkl"
     validation_metric = "f1"
-    patience = 10
+    weight_decay_adam = 0.0001
     
     if k_fold:
         # perform KFold evaluation and return the performance on validation and test sets
@@ -151,7 +154,7 @@ def implement_swnu_network(
             raise ValueError("criterion must be either 'focal' or 'cross_entropy'")
 
         # define optimizer
-        optimizer = torch.optim.Adam(swnu_network_model.parameters(), lr=learning_rate)
+        optimizer = torch.optim.Adam(swnu_network_model.parameters(), lr=learning_rate, weight_decay= weight_decay_adam)
         
         # perform k-fold evaluation which returns a dataframe with columns for the
         # loss, accuracy, f1 (macro) and individual f1-scores for each fold
@@ -188,7 +191,7 @@ def implement_swnu_network(
             raise ValueError("criterion must be either 'focal' or 'cross_entropy'")
 
         # define optimizer
-        optimizer = torch.optim.Adam(swnu_network_model.parameters(), lr=learning_rate)
+        optimizer = torch.optim.Adam(swnu_network_model.parameters(), lr=learning_rate, weight_decay= weight_decay_adam)
         
         # train FFN
         swnu_network_model = training_pytorch(model=swnu_network_model,
@@ -262,11 +265,13 @@ def swnu_network_hyperparameter_search(
     time_feature: list[str] | str | None = None,
     standardise_method: list[str] | str | None = None,
     augmentation_type: str = "Conv1d",
+    hidden_dim_aug: list[int] | int | None = None,
     comb_method: str = "concatenation",
     path_indices : list | np.array | None = None,
     data_split_seed: int = 0,
     k_fold: bool = False,
     n_splits: int = 5,
+    patience: int = 10,
     validation_metric: str = "f1",
     results_output: str | None = None,
     verbose: bool = True
@@ -345,10 +350,12 @@ def swnu_network_hyperparameter_search(
                                                 loss=loss,
                                                 gamma=gamma,
                                                 augmentation_type=augmentation_type,
+                                                hidden_dim_aug=hidden_dim_aug,
                                                 comb_method=comb_method,
                                                 data_split_seed=data_split_seed,
                                                 k_fold=k_fold,
                                                 n_splits=n_splits,
+                                                patience=patience,
                                                 verbose_training=False,
                                                 verbose_results=verbose,
                                                 verbose_model=verbose_model
@@ -378,6 +385,7 @@ def swnu_network_hyperparameter_search(
                                             results["gamma"] = gamma
                                             results["k_fold"] = k_fold
                                             results["augmentation_type"] = augmentation_type
+                                            results["hidden_dim_aug"] = hidden_dim_aug
                                             results["comb_method"] = comb_method
                                             results["model_id"] = model_id
                                             results_df = pd.concat([results_df, results])
@@ -411,6 +419,7 @@ def swnu_network_hyperparameter_search(
                                                             "loss": loss,
                                                             "gamma": gamma,
                                                             "augmentation_type": augmentation_type,
+                                                            "hidden_dim_aug": hidden_dim_aug,
                                                             "comb_method": comb_method
                                                         })
 
@@ -452,10 +461,12 @@ def swnu_network_hyperparameter_search(
             loss=checkpoint["extra_info"]["loss"],
             gamma=checkpoint["extra_info"]["gamma"],
             augmentation_type=checkpoint["extra_info"]["augmentation_type"],
+            hidden_dim_aug = checkpoint["extra_info"]["hidden_dim_aug"],
             comb_method=checkpoint["extra_info"]["comb_method"],
             data_split_seed=data_split_seed,
             k_fold=k_fold,
             n_splits=n_splits,
+            patience=patience,
             verbose_training=False,
             verbose_results=False,
             verbose_model=False
@@ -488,6 +499,7 @@ def swnu_network_hyperparameter_search(
         test_results["gamma"] = checkpoint["extra_info"]["gamma"]
         test_results["k_fold"] = k_fold
         test_results["augmentation_type"] = checkpoint["extra_info"]["augmentation_type"]
+        test_results["hidden_dim_aug"] = checkpoint["extra_info"]["hidden_dim_aug"]
         test_results["comb_method"] = checkpoint["extra_info"]["comb_method"]
         test_results_df = pd.concat([test_results_df, test_results])
         
