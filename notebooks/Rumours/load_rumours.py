@@ -9,16 +9,16 @@ import torch
 ########## Load in data ##########################
 ##################################################
 
-# load in data 
-cwd = os.getcwd()
-data_path = cwd+'/notebooks/Rumours/conversations.json'
-with open(data_path,'r') as f:
-  data = json.load(f)
+# load in data
+data_path = os.path.join(os.path.dirname(__file__), "conversations.json")
+with open(data_path, 'r') as f:
+    data = json.load(f)
 
 
 ##################################################
 ########## Conversion to Longitudinal ############
 ##################################################
+
 #Convert conversation thread to linear timeline: we use timestamps of each post in the twitter thread to obtain a chronologically ordered list.
 def tree2timeline(conversation):
     timeline = []    
