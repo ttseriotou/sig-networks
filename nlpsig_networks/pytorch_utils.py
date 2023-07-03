@@ -11,9 +11,15 @@ from torch.optim.optimizer import Optimizer
 from torch.utils.data.dataloader import DataLoader
 from torch.optim.lr_scheduler import _LRScheduler, ReduceLROnPlateau
 from tqdm.auto import tqdm
+import datetime
 
 from nlpsig.classification_utils import Folds, set_seed
 from nlpsig_networks.focal_loss import ClassBalanced_FocalLoss, FocalLoss
+
+
+def _get_timestamp():
+    timestamp = str(datetime.datetime.now())
+    return timestamp.replace(" ", "-").replace(":", "-").replace(".", "-")
 
 
 class EarlyStopper:
@@ -120,7 +126,7 @@ class SaveBestModel:
                  metric: str,
                  best_valid_metric: float | None = None,
                  best_train_metric: float | None = None,
-                 output: str = "best_model.pkl",
+                 output: str = f"best_model_{_get_timestamp()}.pkl",
                  verbose: bool = False):
         """
         Class to save the best model while training. If the current epoch's 
@@ -151,7 +157,8 @@ class SaveBestModel:
             This can be used for making a decision between two models which
             have the same validation score.
         output : str, optional
-            Where to store the best model, by default "best_model.pkl".
+            Where to store the best model, by default "best_model_{timestamp}.pkl".
+            where timestamp is the time of initialising
         verbose : bool, optional
             Whether or not to print out progress, by default False.
         """
@@ -312,8 +319,9 @@ def training_pytorch(
     scheduler: Optional[_LRScheduler] = None,
     valid_loader: Optional[DataLoader] = None,
     seed: Optional[int] = 42,
+    return_best: bool = False,
     save_best: bool = False,
-    output: str = "best_model.pkl",
+    output: str = f"best_model_{_get_timestamp()}.pkl",
     early_stopping: bool = False,
     validation_metric: str = "loss",
     patience: Optional[int] = 10,
@@ -364,7 +372,7 @@ def training_pytorch(
 
     set_seed(seed)
 
-    if save_best:
+    if save_best | return_best:
         # initialise SaveBestModel class
         save_best_model = SaveBestModel(metric=validation_metric,
                                         output=output,
@@ -414,7 +422,7 @@ def training_pytorch(
             # save metric that we want to use on validation set
             metric_v = validation_results[validation_metric]
                 
-            if save_best:
+            if save_best | return_best:
                 # compute loss, accuracy and F1 on training set as well
                 # this is to determine how well we're doing on the training set
                 # allows us to choose between models that have the same validation
@@ -448,14 +456,18 @@ def training_pytorch(
         if (scheduler is not None) and (not isinstance(scheduler, ReduceLROnPlateau)):
             scheduler.step()
 
-    if save_best:
+    if save_best | return_best:
         checkpoint = torch.load(f=output)
         model.load_state_dict(checkpoint["model_state_dict"])
-        if verbose:
-            print(f"Returning the best model which occurred at epoch {checkpoint['epoch']}")
-        return model
-    else:
-        return model
+        if save_best:
+            if verbose:
+                print(f"Returning the best model which occurred at epoch {checkpoint['epoch']}")
+        if return_best:
+            if not save_best:
+                os.remove(output)
+            return model
+    
+    return model
 
 
 def testing_pytorch(
@@ -540,7 +552,7 @@ def KFold_pytorch(
     num_epochs: int,
     return_metric_for_each_fold: bool = False,
     seed: Optional[int] = 42,
-    save_best: bool = False,
+    return_best: bool = False,
     early_stopping: bool = False,
     patience: Optional[int] = 10,
     verbose: bool = False,
@@ -589,13 +601,14 @@ def KFold_pytorch(
         Loss, Accuracy, F1 scores and macro F1 score for each fold
         (test and validation)
     """
+    initial_starting_state_file = f"starting_state_{_get_timestamp()}.pkl"
     torch.save(
         obj={
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "criterion": criterion,
         },
-        f="starting_state.pkl",
+        f=initial_starting_state_file,
     )
     
     loss = []
@@ -618,7 +631,7 @@ def KFold_pytorch(
             print("*" * 50)
 
         # reload starting state of the model, optimizer and loss
-        checkpoint = torch.load(f="starting_state.pkl")
+        checkpoint = torch.load(f=initial_starting_state_file)
         model.load_state_dict(checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         criterion = checkpoint["criterion"]
@@ -641,7 +654,8 @@ def KFold_pytorch(
             optimizer=optimizer,
             num_epochs=num_epochs,
             seed=seed,
-            save_best=save_best,
+            return_best=return_best,
+            save_best=False,
             early_stopping=early_stopping,
             patience=patience,
             verbose=verbose,
@@ -687,11 +701,7 @@ def KFold_pytorch(
             valid_f1_scores.append(None)
 
     # remove starting state pickle file
-    os.remove("starting_state.pkl")
-    # if save_best=True, it will save models in best_model.pkl by default
-    # so we remove this file
-    if os.path.exists("best_model.pkl"):
-        os.remove("best_model.pkl")
+    os.remove(initial_starting_state_file)
     
     if return_metric_for_each_fold:
         # return how well the model performed on each individual fold
