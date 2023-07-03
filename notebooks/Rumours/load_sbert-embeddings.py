@@ -29,6 +29,8 @@ def embedding_df(emb_data):
     df_emb['id'] = df_emb['id'].astype('float')
     df_emb[[c for c in df_emb.columns if re.match("^e\w*[0-9]", c)]]= df_emb[[c for c in df_emb.columns if re.match("^e\w*[0-9]", c)]].astype('float')
 
+    df_emb = df_emb.reset_index(drop=True)
+
     return df_emb
 
 df_emb = embedding_df(emb_data)

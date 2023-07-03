@@ -114,19 +114,21 @@ total_year_hours = 365*24
 def time_fraction(x):
         return x.year + abs(x - datetime.datetime(x.year, 1,1,0)).total_seconds() / 3600.0 / total_year_hours
 
+tln_idx = 0
 for subset in ['train','dev','test']:
     for e, thread in enumerate(switch_timelines[subset]):
         df_thread = pd.DataFrame(thread)
         df_thread = pd.DataFrame(thread, columns = ['id', 'datetime','label','text'])
         df_thread = df_thread.reindex(columns=['id','label','datetime','text'])
 
-        df_thread['timeline_id'] = str(e)
+        df_thread['timeline_id'] = str(tln_idx)
         df_thread['id'] = df_thread['id'].astype('float')
         df_thread['datetime']= pd.to_datetime(df_thread['datetime'])
         df_thread['datetime'] = df_thread['datetime'].map(lambda t: t.replace(tzinfo=None))
         #df_thread['timestamp'] = df_thread['datetime'].map(lambda t: time_fraction(t))
 
         df_rumours = pd.concat([df_rumours, df_thread])
+        tln_idx+=1
 
 df_rumours = df_rumours.reset_index(drop=True)
 
