@@ -170,6 +170,7 @@ def fine_tune_transformer_for_classification(
     label_column: str,
     seed: int,
     data_split_seed: int = 0,
+    split_ids: torch.Tensor | None = None,
     k_fold: bool = False,
     n_splits: int = 5,
     return_metric_for_each_fold: bool = False,
@@ -239,6 +240,7 @@ def fine_tune_transformer_for_classification(
         # x_data is just a dummy torch tensor of size (len(y_data)) to get the fold indices
         split_data = DataSplits(x_data=torch.rand((len(y_data))),
                                 y_data=y_data,
+                                groups=split_ids,
                                 train_size=0.8,
                                 valid_size=0.2,
                                 shuffle=True,

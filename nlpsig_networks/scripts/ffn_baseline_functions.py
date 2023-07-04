@@ -25,6 +25,7 @@ def implement_ffn(
     loss: str,
     gamma: float = 0.0,
     data_split_seed: int = 0,
+    split_ids: torch.Tensor | None = None,
     k_fold: bool = False,
     n_splits: int = 5,
     patience: int = 10,
@@ -69,6 +70,8 @@ def implement_ffn(
         Ignored if loss="cross_entropy"
     data_split_seed : int, optional
         The seed which is used when splitting, by default 0
+    split_ids : torch.Tensor | None, optional
+        Groups to split by, default None.
     k_fold : bool, optional
         Whether or not to use k-fold validation, by default False
     n_splits : int, optional
@@ -121,6 +124,7 @@ def implement_ffn(
         # split dataset
         folds = Folds(x_data=x_data,
                       y_data=y_data,
+                      groups=split_ids,
                       n_splits=n_splits,
                       shuffle=True,
                       random_state=data_split_seed)
@@ -153,6 +157,7 @@ def implement_ffn(
         # split dataset
         split_data = DataSplits(x_data=x_data,
                                 y_data=y_data,
+                                groups=split_ids,
                                 train_size=0.8,
                                 valid_size=0.2,
                                 shuffle=True,
@@ -231,6 +236,7 @@ def ffn_hyperparameter_search(
     loss: str,
     gamma: float = 0.0,
     data_split_seed: int = 0,
+    split_ids: torch.Tensor | None = None,
     k_fold: bool = False,
     n_splits: int = 5,
     patience: int = 10,
@@ -251,7 +257,7 @@ def ffn_hyperparameter_search(
     Parameters
     ----------
     num_epochs : int
-        _description_
+        _description_    
     x_data : torch.tensor | np.array
         _description_
     y_data : torch.tensor | np.array
@@ -272,6 +278,8 @@ def ffn_hyperparameter_search(
         _description_, by default 0.0
     data_split_seed : int, optional
         _description_, by default 0
+    split_ids : torch.Tensor | None, optional
+        _description_, by default None    
     k_fold : bool, optional
         _description_, by default False
     n_splits : int, optional
@@ -324,6 +332,7 @@ def ffn_hyperparameter_search(
                                                loss=loss,
                                                gamma=gamma,
                                                data_split_seed=data_split_seed,
+                                               split_ids=split_ids,
                                                k_fold=k_fold,
                                                n_splits=n_splits,
                                                patience = patience,
@@ -383,6 +392,7 @@ def ffn_hyperparameter_search(
                                         loss=loss,
                                         gamma=gamma,
                                         data_split_seed=data_split_seed,
+                                        split_ids=split_ids,
                                         k_fold=k_fold,
                                         n_splits=n_splits,
                                         patience=patience,
@@ -557,6 +567,7 @@ def histories_baseline_hyperparameter_search(
     history_lengths: list[int] = [10],
     path_indices : list | np.array | None = None,
     data_split_seed: int = 0,
+    split_ids: torch.Tensor | None = None,
     k_fold: bool = False,
     n_splits: int = 5,
     patience: int = 10,
@@ -621,6 +632,7 @@ def histories_baseline_hyperparameter_search(
                         loss=loss,
                         gamma=gamma,
                         data_split_seed=data_split_seed,
+                        split_ids=split_ids,
                         k_fold=k_fold,
                         n_splits=n_splits,
                         patience=patience,
@@ -671,6 +683,7 @@ def histories_baseline_hyperparameter_search(
             loss=loss,
             gamma=gamma,
             data_split_seed=data_split_seed,
+            split_ids=split_ids,
             k_fold=k_fold,
             n_splits=n_splits,
             patience = patience,
@@ -732,6 +745,7 @@ def histories_baseline_hyperparameter_search(
                                         loss=loss,
                                         gamma=gamma,
                                         data_split_seed=data_split_seed,
+                                        split_ids=split_ids,
                                         k_fold=k_fold,
                                         n_splits=n_splits,
                                         patience = patience,
