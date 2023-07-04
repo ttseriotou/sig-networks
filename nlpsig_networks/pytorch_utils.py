@@ -550,6 +550,7 @@ def KFold_pytorch(
     criterion: nn.Module,
     optimizer: Optimizer,
     num_epochs: int,
+    batch_size: int = 64,
     return_metric_for_each_fold: bool = False,
     seed: Optional[int] = 42,
     return_best: bool = False,
@@ -573,6 +574,8 @@ def KFold_pytorch(
         PyTorch Optimizer
     num_epochs : int
         Number of epochs
+    batch_size : int, optional
+        Batch size, by default 64
     return_metric_for_each_fold : bool, optional
         Whether or not to return the metrics for each fold individually,
         i.e. every row in the returned dataframe is the performance
@@ -643,7 +646,8 @@ def KFold_pytorch(
             criterion.set_samples_per_cls_from_y(y=y_train)
 
         # obtain test, valid and test dataloaders
-        train, valid, test = folds.get_splits(fold_index=fold, as_DataLoader=True)
+        data_loader_args = {"batch_size": batch_size, "shuffle": True}
+        train, valid, test = folds.get_splits(fold_index=fold, as_DataLoader=True, data_loader_args=data_loader_args)
 
         # train pytorch model
         model = training_pytorch(

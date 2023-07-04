@@ -25,6 +25,7 @@ def implement_lstm(
     seed: int,
     loss: str,
     gamma: float = 0.0,
+    batch_size: int = 64,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
     split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,
@@ -74,6 +75,8 @@ def implement_lstm(
     gamma : float, optional
         Gamma to use for focal loss, by default 0.0.
         Ignored if loss="cross_entropy"
+    batch_size: int, optional
+        Batch size, by default 64
     data_split_seed : int, optional
         The seed which is used when splitting, by default 0.
     split_ids : torch.Tensor | None, optional
@@ -164,6 +167,7 @@ def implement_lstm(
                                 criterion=criterion,
                                 optimizer=optimizer,
                                 num_epochs=num_epochs,
+                                batch_size=batch_size,
                                 seed=seed,
                                 return_best=return_best,
                                 early_stopping=early_stopping,
@@ -171,6 +175,8 @@ def implement_lstm(
                                 verbose=verbose_training)
     else:
         # split dataset
+        data_loader_args = {"batch_size": batch_size, "shuffle": True}
+
         split_data = DataSplits(x_data=x_data,
                                 y_data=y_data,
                                 groups=split_ids,
@@ -179,7 +185,7 @@ def implement_lstm(
                                 indices=split_indices,
                                 shuffle=True,
                                 random_state=data_split_seed)
-        train, valid, test = split_data.get_splits(as_DataLoader=True)
+        train, valid, test = split_data.get_splits(as_DataLoader=True, data_loader_args=data_loader_args)
 
         # define loss
         if loss == "focal":
@@ -291,6 +297,7 @@ def lstm_hyperparameter_search(
     seeds : list[int],
     loss: str,
     gamma: float = 0.0,
+    batch_size: int = 64,
     path_indices : list | np.array | None = None,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
@@ -334,6 +341,8 @@ def lstm_hyperparameter_search(
         _description_
     gamma : float, optional
         _description_, by default 0.0
+    batch_size : int, optional
+        _description_, by default 64
     data_split_seed : int, optional
         _description_, by default 0
     split_ids : torch.Tensor | None, optional
@@ -406,6 +415,7 @@ def lstm_hyperparameter_search(
                                                     seed=seed,
                                                     loss=loss,
                                                     gamma=gamma,
+                                                    batch_size=batch_size,
                                                     data_split_seed=data_split_seed,
                                                     split_ids=split_ids,
                                                     split_indices=split_indices,
@@ -476,6 +486,7 @@ def lstm_hyperparameter_search(
             seed=seed,
             loss=loss,
             gamma=gamma,
+            batch_size=batch_size,
             data_split_seed=data_split_seed,
             split_ids=split_ids,
             split_indices=split_indices,

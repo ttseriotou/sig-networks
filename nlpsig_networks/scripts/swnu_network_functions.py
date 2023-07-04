@@ -87,6 +87,7 @@ def implement_swnu_network(
     seed: int,
     loss: str,
     gamma: float = 0.0,
+    batch_size: int = 64,
     augmentation_type: str = "Conv1d",
     hidden_dim_aug: list[int] | int | None = None,
     comb_method: str = "concatenation",
@@ -169,6 +170,7 @@ def implement_swnu_network(
                                 criterion=criterion,
                                 optimizer=optimizer,
                                 num_epochs=num_epochs,
+                                batch_size=batch_size,
                                 seed=seed,
                                 save_best=save_best,
                                 early_stopping=early_stopping,
@@ -177,6 +179,8 @@ def implement_swnu_network(
                                 verbose=verbose_training)
     else:
         # split dataset
+        data_loader_args = {"batch_size": batch_size, "shuffle": True}
+
         split_data = DataSplits(x_data=x_data,
                                 y_data=y_data,
                                 groups=split_ids,
@@ -185,7 +189,7 @@ def implement_swnu_network(
                                 indices=split_indices,
                                 shuffle=True,
                                 random_state=data_split_seed)
-        train, valid, test = split_data.get_splits(as_DataLoader=True)
+        train, valid, test = split_data.get_splits(as_DataLoader=True, data_loader_args=data_loader_args)
 
         # define loss
         if loss == "focal":
@@ -269,6 +273,7 @@ def swnu_network_hyperparameter_search(
     seeds : list[int],
     loss: str,
     gamma: float = 0.0,
+    batch_size: int = 64,
     time_feature: list[str] | str | None = None,
     standardise_method: list[str] | str | None = None,
     add_time_in_path: bool = False,
@@ -360,6 +365,7 @@ def swnu_network_hyperparameter_search(
                                                 seed=seed,
                                                 loss=loss,
                                                 gamma=gamma,
+                                                batch_size=batch_size,
                                                 augmentation_type=augmentation_type,
                                                 hidden_dim_aug=hidden_dim_aug,
                                                 comb_method=comb_method,
@@ -431,6 +437,7 @@ def swnu_network_hyperparameter_search(
                                                             "BiLSTM": BiLSTM,
                                                             "loss": loss,
                                                             "gamma": gamma,
+                                                            "batch_size": batch_size,
                                                             "augmentation_type": augmentation_type,
                                                             "hidden_dim_aug": hidden_dim_aug,
                                                             "comb_method": comb_method
@@ -473,6 +480,7 @@ def swnu_network_hyperparameter_search(
             seed=seed,
             loss=checkpoint["extra_info"]["loss"],
             gamma=checkpoint["extra_info"]["gamma"],
+            batch_size=checkpoint["extra_info"]["batch_size"],,
             augmentation_type=checkpoint["extra_info"]["augmentation_type"],
             hidden_dim_aug = checkpoint["extra_info"]["hidden_dim_aug"],
             comb_method=checkpoint["extra_info"]["comb_method"],
