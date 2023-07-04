@@ -92,6 +92,7 @@ def implement_swnu_network(
     comb_method: str = "concatenation",
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
+    split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,
     k_fold: bool = False,
     n_splits: int = 5,
     patience: int = 10,
@@ -143,7 +144,9 @@ def implement_swnu_network(
         # split dataset
         folds = Folds(x_data=x_data,
                       y_data=y_data,
+                      groups=split_ids,
                       n_splits=n_splits,
+                      indices=split_indices,
                       shuffle=True,
                       random_state=data_split_seed)
         
@@ -179,6 +182,7 @@ def implement_swnu_network(
                                 groups=split_ids,
                                 train_size=0.8,
                                 valid_size=0.2,
+                                indices=split_indices,
                                 shuffle=True,
                                 random_state=data_split_seed)
         train, valid, test = split_data.get_splits(as_DataLoader=True)
@@ -274,6 +278,7 @@ def swnu_network_hyperparameter_search(
     path_indices : list | np.array | None = None,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
+    split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,
     k_fold: bool = False,
     n_splits: int = 5,
     patience: int = 10,
@@ -360,6 +365,7 @@ def swnu_network_hyperparameter_search(
                                                 comb_method=comb_method,
                                                 data_split_seed=data_split_seed,
                                                 split_ids=split_ids,
+                                                split_indices=split_indices,
                                                 k_fold=k_fold,
                                                 n_splits=n_splits,
                                                 patience=patience,
@@ -472,6 +478,7 @@ def swnu_network_hyperparameter_search(
             comb_method=checkpoint["extra_info"]["comb_method"],
             data_split_seed=data_split_seed,
             split_ids=split_ids,
+            split_indices=split_indices,
             k_fold=k_fold,
             n_splits=n_splits,
             patience=patience,

@@ -122,6 +122,7 @@ for subset in ['train','dev','test']:
         df_thread = df_thread.reindex(columns=['id','label','datetime','text'])
 
         df_thread['timeline_id'] = str(tln_idx)
+        df_thread['set'] = subset
         df_thread['id'] = df_thread['id'].astype('float64')
         df_thread['datetime']= pd.to_datetime(df_thread['datetime'])
         df_thread['datetime'] = df_thread['datetime'].map(lambda t: t.replace(tzinfo=None))
