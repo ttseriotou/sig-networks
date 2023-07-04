@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import nlpsig
 from nlpsig.classification_utils import DataSplits, Folds
-from nlpsig_networks.pytorch_utils import SaveBestModel, training_pytorch, testing_pytorch, set_seed, KFold_pytorch
+from nlpsig_networks.pytorch_utils import _get_timestamp, SaveBestModel, training_pytorch, testing_pytorch, set_seed, KFold_pytorch
 from nlpsig_networks.ffn_baseline import FeedforwardNeuralNetModel
 from nlpsig_networks.focal_loss import FocalLoss
 import torch
@@ -12,7 +12,7 @@ import signatory
 from tqdm.auto import tqdm
 import os
 
-        
+
 def implement_ffn(
     num_epochs: int,
     x_data: torch.tensor | np.array,
@@ -107,9 +107,9 @@ def implement_ffn(
     x_data = x_data.float()
     
     # set some variables for training
-    save_best = True
+    return_best = True
     early_stopping = True
-    model_output = "best_model.pkl"
+    model_output = f"best_model_{_get_timestamp()}.pkl"
     validation_metric = "f1"
     patience = 10
     
@@ -142,7 +142,7 @@ def implement_ffn(
                                 optimizer=optimizer,
                                 num_epochs=num_epochs,
                                 seed=seed,
-                                save_best=save_best,
+                                return_best=return_best,
                                 early_stopping=early_stopping,
                                 patience=patience,
                                 verbose=verbose_training)
@@ -177,7 +177,7 @@ def implement_ffn(
                                      num_epochs=num_epochs,
                                      valid_loader=valid,
                                      seed=seed,
-                                     save_best=save_best,
+                                     return_best=return_best,
                                      output=model_output,
                                      early_stopping=early_stopping,
                                      validation_metric=validation_metric,
@@ -288,7 +288,7 @@ def ffn_hyperparameter_search(
         raise ValueError("validation_metric must be either 'loss', 'accuracy' or 'f1'")
     
     # initialise SaveBestModel class
-    model_output = "best_ffn_model.pkl"
+    model_output = f"best_ffn_model_{_get_timestamp()}.pkl"
     save_best_model = SaveBestModel(metric=validation_metric,
                                     output=model_output,
                                     verbose=verbose)
@@ -422,45 +422,47 @@ def obtain_mean_history(df: pd.DataFrame,
                         id_column: str,
                         label_column: str,
                         embeddings: np.array,
-                        k: int,
                         path_indices : list | np.array | None = None,
                         concatenate_current: bool = True) -> torch.tensor:
-    # use nlpsig to construct the path as a numpy array
-    # first define how we construct the path
-    path_specifics = {"pad_by": "history",
-                      "zero_padding": False,
-                      "method": "k_last",
-                      "k": k,
-                      "time_feature": None,
-                      "embeddings": "full",
-                      "include_current_embedding": True}
-    
-    # obtain path by using PrepareData class and .pad method
     paths = nlpsig.PrepareData(original_df=df,
                                id_column=id_column,
                                label_column=label_column,
                                embeddings=embeddings)
-    path = paths.pad(**path_specifics)
+    # obtain column names of the embeddings in paths.df
+    colnames = paths._obtain_colnames(embeddings="full")
+    
+    # initialise empty array to store mean history
+    mean_history = np.zeros((len(df.index), len(colnames)))
+    print("Computing the mean history for each item in the dataframe")
+    for i in tqdm(range(len(df.index))):
+        # look at particular text at a given index
+        text = paths.df.iloc[i]
+        id = text[id_column]
+        timeline_index = text["timeline_index"]
+
+        # obtain history of the pariicular text
+        history = paths.df[
+            (paths.df[id_column] == id) & (paths.df["timeline_index"] <= timeline_index)
+        ][colnames]
+        
+        mean_history[i] = np.array(history).mean(axis=0)
     
     # slice the path in specified way
     if path_indices is not None:
-        path = path[path_indices]
-
-    # remove last two columns (which contains the id and the label)
-    path = path[:,:,:-2].astype("float")
+        mean_history = mean_history[path_indices]
+        embeddings = embeddings[path_indices]
     
-    # average in the first dimension to pool embeddings in the path
-    path = path.mean(1).astype("float")
+    mean_history = mean_history.astype("float")
     
     # concatenate with current embedding (and convert to torch tensor)
     if concatenate_current:
-        path =  torch.cat([torch.from_numpy(path),
-                           torch.from_numpy(embeddings[path_indices])],
-                          dim=1).float()
+        mean_history =  torch.cat([torch.from_numpy(mean_history),
+                                   torch.from_numpy(embeddings)],
+                                  dim=1).float()
     else:
-        path = torch.from_numpy(path).float()
+        mean_history = torch.from_numpy(mean_history).float()
 
-    return path
+    return mean_history
 
 
 def obtain_signatures_history(method: str,
@@ -506,6 +508,7 @@ def obtain_signatures_history(method: str,
     # slice the path in specified way
     if path_indices is not None:
         path = path[path_indices]
+        embeddings = embeddings[path_indices]
 
     # remove last two columns (which contains the id and the label)
     path = path[:,:,:-2].astype("float")
@@ -519,7 +522,7 @@ def obtain_signatures_history(method: str,
     
     # concatenate with current embedding
     if concatenate_current:
-        sig = torch.cat([sig, torch.from_numpy(embeddings[path_indices])],
+        sig = torch.cat([sig, torch.from_numpy(embeddings)],
                         dim=1)
 
     return sig
@@ -533,7 +536,6 @@ def histories_baseline_hyperparameter_search(
     embeddings: np.array,
     y_data: np.array,
     output_dim: int,
-    window_sizes: list[int],
     hidden_dim_sizes : list[list[int]] | list[int],
     dropout_rates: list[float],
     learning_rates: list[float],
@@ -544,6 +546,7 @@ def histories_baseline_hyperparameter_search(
     log_signature: bool = False,
     dim_reduce_methods: list[str] | None = None,
     dimension_and_sig_depths: list[tuple[int, int]] | None = None,
+    history_lengths: list[int] = [10],
     path_indices : list | np.array | None = None,
     data_split_seed: int = 0,
     k_fold: bool = False,
@@ -561,18 +564,18 @@ def histories_baseline_hyperparameter_search(
             raise ValueError(msg)
         
     # initialise SaveBestModel class
-    model_output = "best_ffn_history_model.pkl"
+    model_output = f"best_ffn_history_model_{_get_timestamp()}.pkl"
     best_model = SaveBestModel(metric=validation_metric,
                                output=model_output,
                                verbose=verbose)
     
     results_df = pd.DataFrame()
     model_id = 0
-    for k in tqdm(window_sizes):
-        if verbose:
-            print("\n" + "-" * 50)
-            print(f"k: {k}")
-        if use_signatures:
+    if use_signatures:
+        for k in tqdm(history_lengths):
+            if verbose:
+                print("\n" + "-" * 50)
+                print(f"k: {k}")
             for dimension, sig_depth in tqdm(dimension_and_sig_depths):
                 for method in tqdm(dim_reduce_methods):
                     if verbose:
@@ -582,17 +585,19 @@ def histories_baseline_hyperparameter_search(
                             f"method: {method}")
                     
                     # obtain the ffn input by dimension reduction and computing signatures
-                    x_data = obtain_signatures_history(method=method,
-                                                       dimension=dimension,
-                                                       sig_depth=sig_depth,
-                                                       log_signature=log_signature,
-                                                       df=df,
-                                                       id_column=id_column,
-                                                       label_column=label_column,
-                                                       embeddings=embeddings,
-                                                       k=k,
-                                                       path_indices=path_indices,
-                                                       concatenate_current=True)
+                    x_data = obtain_signatures_history(
+                        method=method,
+                        dimension=dimension,
+                        sig_depth=sig_depth,
+                        log_signature=log_signature,
+                        df=df,
+                        id_column=id_column,
+                        label_column=label_column,
+                        embeddings=embeddings,
+                        k=k,
+                        path_indices=path_indices,
+                        concatenate_current=True
+                    )
 
                     # perform hyperparameter search for FFN
                     results, best_valid_metric, FFN_info = ffn_hyperparameter_search(
@@ -625,57 +630,54 @@ def histories_baseline_hyperparameter_search(
                     results_df = pd.concat([results_df, results])
                     
                     best_model(current_valid_metric=best_valid_metric,
-                               extra_info={"k": k,
-                                           "input_dim": x_data.shape[1],
-                                           "dimension": dimension,
-                                           "sig_depth": sig_depth,
-                                           "method": method,
-                                           "log_signature": log_signature,
-                                           **FFN_info})
+                            extra_info={"k": k,
+                                        "input_dim": x_data.shape[1],
+                                        "dimension": dimension,
+                                        "sig_depth": sig_depth,
+                                        "method": method,
+                                        "log_signature": log_signature,
+                                        **FFN_info})
                     
                     model_id += 1
-        else:
-            # obtain the ffn input by averaging over history
-            x_data = obtain_mean_history(df=df,
-                                         id_column=id_column,
-                                         label_column=label_column,
-                                         embeddings=embeddings,
-                                         k=k,
-                                         path_indices=path_indices,
-                                         concatenate_current=True)
-            
-            # perform hyperparameter search for FFN
-            results, _, best_valid_metric, FFN_info = ffn_hyperparameter_search(
-                num_epochs=num_epochs,
-                x_data=x_data,
-                y_data=y_data,
-                output_dim=output_dim,
-                hidden_dim_sizes=hidden_dim_sizes,
-                dropout_rates=dropout_rates,
-                learning_rates=learning_rates,
-                seeds=seeds,
-                loss=loss,
-                gamma=gamma,
-                data_split_seed=data_split_seed,
-                k_fold=k_fold,
-                n_splits=n_splits,
-                validation_metric=validation_metric,
-                results_output=None,
-                verbose=False
-            )
+    else:
+        # obtain the ffn input by averaging over history
+        x_data = obtain_mean_history(df=df,
+                                     id_column=id_column,
+                                     label_column=label_column,
+                                     embeddings=embeddings,
+                                     path_indices=path_indices,
+                                     concatenate_current=True)
+        
+        # perform hyperparameter search for FFN
+        results, _, best_valid_metric, FFN_info = ffn_hyperparameter_search(
+            num_epochs=num_epochs,
+            x_data=x_data,
+            y_data=y_data,
+            output_dim=output_dim,
+            hidden_dim_sizes=hidden_dim_sizes,
+            dropout_rates=dropout_rates,
+            learning_rates=learning_rates,
+            seeds=seeds,
+            loss=loss,
+            gamma=gamma,
+            data_split_seed=data_split_seed,
+            k_fold=k_fold,
+            n_splits=n_splits,
+            validation_metric=validation_metric,
+            results_output=None,
+            verbose=False
+        )
 
-            # concatenate to results dataframe
-            results["k"] = k
-            results["input_dim"] = x_data.shape[1]
-            results["model_id"] = [float(f"{model_id}.{id}") for id in results["model_id"]]
-            results_df = pd.concat([results_df, results])
-            
-            best_model(current_valid_metric=best_valid_metric,
-                        extra_info={"k": k,
-                                    "input_dim": x_data.shape[1],
-                                    **FFN_info})
-            
-            model_id += 1
+        # concatenate to results dataframe
+        results["input_dim"] = x_data.shape[1]
+        results["model_id"] = [float(f"{model_id}.{id}") for id in results["model_id"]]
+        results_df = pd.concat([results_df, results])
+        
+        best_model(current_valid_metric=best_valid_metric,
+                    extra_info={"input_dim": x_data.shape[1],
+                                **FFN_info})
+        
+        model_id += 1
 
     checkpoint = torch.load(f=model_output)
     if verbose:
@@ -702,7 +704,6 @@ def histories_baseline_hyperparameter_search(
                                      id_column=id_column,
                                      label_column=label_column,
                                      embeddings=embeddings,
-                                     k=checkpoint["extra_info"]["k"],
                                      path_indices=path_indices,
                                      concatenate_current=True)
     
@@ -733,7 +734,8 @@ def histories_baseline_hyperparameter_search(
         test_results["loss"] = loss
         test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
-        test_results["k"] = checkpoint["extra_info"]["k"]
+        if use_signatures:
+            test_results["k"] = checkpoint["extra_info"]["k"]
         test_results["input_dim"] = checkpoint["extra_info"]["input_dim"]
         if use_signatures:
             test_results["dimension"] = checkpoint["extra_info"]["dimension"]

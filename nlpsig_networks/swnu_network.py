@@ -3,6 +3,7 @@ import signatory
 import torch
 import torch.nn as nn
 from nlpsig_networks.swnu import SWNU
+from nlpsig_networks.ffn_baseline import FeedforwardNeuralNetModel
 
 
 class SWNUNetwork(nn.Module):
@@ -23,7 +24,6 @@ class SWNUNetwork(nn.Module):
         output_dim: int,
         dropout_rate: float,
         augmentation_type: str = "Conv1d",
-        augmentation_args: dict | None = None,
         hidden_dim_aug: list[int] | int | None = None,
         BiLSTM: bool = False,
         comb_method: str = "gated_addition",
@@ -58,9 +58,6 @@ class SWNUNetwork(nn.Module):
             Options are:
             - "Conv1d": passes path through 1D convolution layer.
             - "signatory": passes path through `Augment` layer from `signatory` package.
-        augmentation_args : dict | None, optional
-            Arguments to pass into `torch.Conv1d` or `signatory.Augment`, by default None.
-            If None, by default will set `kernel_size=3`, `stride=1`, `padding=0`.
         hidden_dim_aug : list[int] | int | None
             Dimensions of the hidden layers in the augmentation layer.
             Passed into `Augment` class from `signatory` package if
@@ -74,65 +71,38 @@ class SWNUNetwork(nn.Module):
             Options are:
             - concatenation: concatenation of path signature and embedding vector
             - gated_addition: element-wise addition of path signature and embedding vector
+            - gated_concatenation: concatenation of linearly gated path signature and embedding vector
+            - scaled_concatenation: concatenation of single value scaled path signature and embedding vector
         """
         super(SWNUNetwork, self).__init__()
-        
-        # dimensionality reduction on the input prior to SWNU
-        self.input_channels = input_channels
-        self.augmentation_type = augmentation_type
-        if isinstance(hidden_dim_aug, int):
-            hidden_dim_aug = [hidden_dim_aug]
-        elif hidden_dim_aug is None:
-            hidden_dim_aug = []
-        self.hidden_dim_aug = hidden_dim_aug
-        if augmentation_args is None:
-            augmentation_args = {"kernel_size": 3,
-                                 "stride": 1,
-                                 "padding": 1}
-        # convolution
-        self.conv = nn.Conv1d(
-            in_channels=input_channels,
-            out_channels=output_channels,
-            **augmentation_args,
-        )
-        # alternative to convolution: using Augment from signatory 
-        self.augment = signatory.Augment(
-            in_channels=input_channels,
-            layer_sizes=self.hidden_dim_aug + [output_channels],
-            include_original=False,
-            include_time=False,
-            **augmentation_args,
-        )
-        # non-linearity
-        self.tanh1 = nn.Tanh()
-        
-        # signature window network unit to obtain feature set for FFN
-        if isinstance(hidden_dim_swnu, int):
-            hidden_dim_swnu = [hidden_dim_swnu]
 
-        self.swnu = SWNU(input_size=output_channels,
-                         hidden_dim=hidden_dim_swnu,
+        self.input_channels = input_channels
+        
+        self.swnu = SWNU(input_channels=input_channels,
+                         output_channels=output_channels,
                          log_signature=log_signature,
                          sig_depth=sig_depth,
+                         hidden_dim=hidden_dim_swnu,
+                         augmentation_type=augmentation_type,
+                         hidden_dim_aug=hidden_dim_aug,
                          BiLSTM=BiLSTM)
         
         # signature without lift (for passing into FFN)
-        mult = 2 if BiLSTM else 1
         if log_signature:
             signature_output_channels = signatory.logsignature_channels(
-                in_channels=mult * hidden_dim_swnu[-1], depth=sig_depth
+                in_channels= self.swnu.hidden_dim[-1], depth=sig_depth
             )
         else:
             signature_output_channels = signatory.signature_channels(
-                channels=mult * hidden_dim_swnu[-1], depth=sig_depth
+                channels= self.swnu.hidden_dim[-1], depth=sig_depth
             )
         
         # determining how to concatenate features to the SWNU features
         self.embedding_dim = embedding_dim
         self.num_time_features = num_time_features
-        if comb_method not in ["concatenation", "gated_addition"]:
+        if comb_method not in ["concatenation", "gated_addition","gated_concatenation","scaled_concatenation"]:
             raise ValueError(
-                "`comb_method` must be either 'concatenation' or 'gated_addition'."
+                "`comb_method` must be either 'concatenation', 'gated_addition', 'gated_concatenation' or 'scaled_concatenation."
             )
         self.comb_method = comb_method
         if augmentation_type not in ["Conv1d", "signatory"]:
@@ -146,7 +116,6 @@ class SWNUNetwork(nn.Module):
                 + self.embedding_dim
             )
         elif self.comb_method == "gated_addition":
-            input_dim = self.embedding_dim
             input_gated_linear = (
                 signature_output_channels
                 + self.num_time_features
@@ -154,63 +123,47 @@ class SWNUNetwork(nn.Module):
             if self.embedding_dim > 0:
                 self.fc_scale = nn.Linear(input_gated_linear, self.embedding_dim)
                 self.scaler = torch.nn.Parameter(torch.zeros(1, self.embedding_dim))
+                input_dim = self.embedding_dim
             else:
                 self.fc_scale = nn.Linear(input_gated_linear, input_gated_linear)
                 self.scaler = torch.nn.Parameter(torch.zeros(1, input_gated_linear))
+                input_dim = input_gated_linear
             # non-linearity
-            self.tanh2 = nn.Tanh()
+            self.tanh = nn.Tanh()
+        elif comb_method=='gated_concatenation':
+            # input dimensions for FFN
+            input_dim = (
+                signature_output_channels
+                + self.num_time_features
+                + self.embedding_dim
+            )
+            # define the scaler parameter
+            input_gated_linear = signature_output_channels + self.num_time_features
+            self.scaler1 = torch.nn.Parameter(torch.zeros(1,input_gated_linear))
+        elif comb_method=='scaled_concatenation':
+            input_dim = (
+                signature_output_channels
+                + self.num_time_features
+                + self.embedding_dim
+            )
+            # define the scaler parameter
+            self.scaler2 = torch.nn.Parameter(torch.tensor([0.0]))
 
         # FFN for classification
+        # make sure hidden_dim_ffn a list of integers
         if isinstance(hidden_dim_ffn, int):
             hidden_dim_ffn = [hidden_dim_ffn]
         self.hidden_dim_ffn = hidden_dim_ffn
         
-        # FFN: input layer
-        self.ffn_input_layer = nn.Linear(input_dim, self.hidden_dim_ffn[0])
-        self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(dropout_rate)
-        input_dim = self.hidden_dim_ffn[0]
-        
-        # FFN: hidden layers
-        self.ffn_linear_layers = []
-        self.ffn_non_linear_layers = []
-        self.dropout_layers = []
-        for l in range(len(self.hidden_dim_ffn)):
-            self.ffn_linear_layers.append(nn.Linear(input_dim, self.hidden_dim_ffn[l]))
-            self.ffn_non_linear_layers.append(nn.ReLU())
-            self.dropout_layers.append(nn.Dropout(dropout_rate))
-            input_dim = self.hidden_dim_ffn[l]
-        
-        self.ffn_linear_layers = nn.ModuleList(self.ffn_linear_layers)
-        self.ffn_non_linear_layers = nn.ModuleList(self.ffn_non_linear_layers)
-        self.dropout_layers = nn.ModuleList(self.dropout_layers)
-        
-        # FFN: readout
-        self.ffn_final_layer = nn.Linear(input_dim, output_dim)
+        self.ffn = FeedforwardNeuralNetModel(input_dim=input_dim,
+                                             hidden_dim=self.hidden_dim_ffn,
+                                             output_dim=output_dim,
+                                             dropout_rate=dropout_rate)
 
     def forward(self, x: torch.Tensor):
         # x has dimensions [batch, length of signal, channels]
-
-        # convolution
-        if self.augmentation_type == "Conv1d":
-            # input has dimensions [batch, length of signal, channels]
-            # swap dimensions to get [batch, channels, length of signal]
-            # (nn.Conv1d expects this)
-            out = torch.transpose(x, 1, 2)
-            # get only the path information
-            out = self.conv(out[:, : self.input_channels, :])
-            out = self.tanh1(out)
-            # make output have dimensions [batch, length of signal, channels]
-            out = torch.transpose(out, 1, 2)
-        elif self.augmentation_type == "signatory":
-            # input has dimensions [batch, length of signal, channels]
-            # (signatory.Augment expects this)
-            # and get only the path information
-            # output has dimensions [batch, length of signal, channels]
-            out = self.augment(x[:, :, : self.input_channels])
-
         # use SWNU to obtain feature set
-        out = self.swnu(out)
+        out = self.swnu(x)
 
         # combine last post embedding
         if x.shape[2] > self.input_channels:
@@ -232,7 +185,7 @@ class SWNUNetwork(nn.Module):
                         ),
                         dim=1,
                     )
-                if x.shape[2] > self.input_channels + self.num_time_features:
+                if self.embedding_dim > 0:
                     # concatenate current post embedding if provided
                     out = torch.cat(
                         (
@@ -260,29 +213,64 @@ class SWNUNetwork(nn.Module):
                 else:
                     out_gated = out
                 out_gated = self.fc_scale(out_gated.float())
-                out_gated = self.tanh2(out_gated)
+                out_gated = self.tanh(out_gated)
                 out_gated = torch.mul(self.scaler, out_gated)
-                if x.shape[2] > self.input_channels + self.num_time_features:
+                if self.embedding_dim > 0:
                     # concatenate current post embedding if provided
-                    out = (
-                        out_gated
-                        + x[:, 0, (self.input_channels + self.num_time_features) :],
+                    out = out_gated + x[:, 0, (self.input_channels + self.num_time_features) :]
+                else:
+                    out = out_gated
+            elif self.comb_method =="gated_concatenation":
+                if self.num_time_features > 0:
+                    # concatenate any time features
+                    out_gated = torch.cat(
+                        (
+                            out,
+                            x[
+                                :,
+                                :,
+                                self.input_channels : (
+                                    self.input_channels + self.num_time_features
+                                ),
+                            ].max(1)[0],
+                        ),
+                        dim=1,
                     )
+                else:
+                    out_gated = out
+                out_gated = torch.mul(self.scaler1, out_gated) 
+                if self.embedding_dim > 0:
+                    # add current post embedding if provided 
+                    out = torch.cat((out_gated, x[:, 0, (self.input_channels+self.num_time_features):]), dim=1 )
+                else:
+                    out = out_gated        
+            elif self.comb_method=="scaled_concatenation":
+                if self.num_time_features > 0:
+                    # concatenate any time features
+                    out_gated = torch.cat(
+                        (
+                            out,
+                            x[
+                                :,
+                                :,
+                                self.input_channels : (
+                                    self.input_channels + self.num_time_features
+                                ),
+                            ].max(1)[0],
+                        ),
+                        dim=1,
+                    )                
+                else:
+                    out_gated = out
+                out_gated = self.scaler2 * out_gated  
+                if self.embedding_dim > 0:
+                    # add current post embedding if provided 
+                    out = torch.cat((out_gated , x[:,0, (self.input_channels+self.num_time_features):]) , dim=1 ) 
                 else:
                     out = out_gated
 
-        # FFN: input layer
-        out = self.ffn_input_layer(out)
-        out = self.relu(out)
-        out = self.dropout(out)
-        
-        # FFN: hidden layers    
-        for l in range(len(self.hidden_dim_ffn)):
-            out = self.ffn_linear_layers[l](out)
-            out = self.ffn_non_linear_layers[l](out)
-            out = self.dropout_layers[l](out)
 
-        # FFN: readout
-        out = self.ffn_final_layer(out)
+        # FFN
+        out = self.ffn(out.float())
 
         return out
