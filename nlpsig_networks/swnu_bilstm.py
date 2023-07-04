@@ -115,7 +115,7 @@ class SeqSigNet(nn.Module):
                 depth=sig_depth
             )
         
-        self.lstm_sig2 = nn.LSTM(input_size=input_dim_lstmsig,
+        self.lstm_sig = nn.LSTM(input_size=input_dim_lstmsig,
                                  hidden_size=hidden_dim_lstm,
                                  num_layers=1,
                                  batch_first=True,
@@ -177,7 +177,7 @@ class SeqSigNet(nn.Module):
         out = torch.nn.utils.rnn.pack_padded_sequence(out, seq_lengths, batch_first=True)
         
         # BiLSTM that combines all deepsignet windows together
-        _, (out, _) = self.lstm_sig2(out)
+        _, (out, _) = self.lstm_sig(out)
         out = out[-1, :, :] + out[-2, :, :]
         
         # reverse sequence padding
