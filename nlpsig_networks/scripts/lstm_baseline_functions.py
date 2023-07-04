@@ -28,6 +28,7 @@ def implement_lstm(
     data_split_seed: int = 0,
     k_fold: bool = False,
     n_splits: int = 5,
+    patience: int = 10,
     verbose_training: bool = True,
     verbose_results: bool = True,
     verbose_model: bool = False,
@@ -78,6 +79,8 @@ def implement_lstm(
     n_splits : int, optional
         Number of splits to use in k-fold validation, by default 5.
         Ignored if k_fold=False
+    patience : int, optional
+        Patience of training, by default 10.
     verbose_training : bool, optional
         Whether or not to print out training progress, by default True
     verbose_results : bool, optional
@@ -118,7 +121,7 @@ def implement_lstm(
     early_stopping = True
     model_output = f"best_model_{_get_timestamp()}.pkl"
     validation_metric = "f1"
-    patience = 10
+    weight_decay_adam = 0.0001
     
     if k_fold:
         # perform KFold evaluation and return the performance on validation and test sets
@@ -138,7 +141,7 @@ def implement_lstm(
             raise ValueError("criterion must be either 'focal' or 'cross_entropy'")
 
         # define optimizer
-        optimizer = torch.optim.Adam(lstm_model.parameters(), lr=learning_rate)
+        optimizer = torch.optim.Adam(lstm_model.parameters(), lr=learning_rate, weight_decay= weight_decay_adam)
         
         # perform k-fold evaluation which returns a dataframe with columns for the
         # loss, accuracy, f1 (macro) and individual f1-scores for each fold
@@ -174,7 +177,7 @@ def implement_lstm(
             raise ValueError("criterion must be either 'focal' or 'cross_entropy'")
 
         # define optimizer
-        optimizer = torch.optim.Adam(lstm_model.parameters(), lr=learning_rate)
+        optimizer = torch.optim.Adam(lstm_model.parameters(), lr=learning_rate, weight_decay= weight_decay_adam)
         
         # train LSTM
         lstm_model = training_pytorch(model=lstm_model,
@@ -277,6 +280,7 @@ def lstm_hyperparameter_search(
     data_split_seed: int = 0,
     k_fold: bool = False,
     n_splits: int = 5,
+    patience: int = 10,
     validation_metric: str = "f1",
     results_output: str | None = None,
     verbose: bool = True
@@ -319,6 +323,8 @@ def lstm_hyperparameter_search(
         _description_, by default False
     n_splits : int, optional
         _description_, by default 5
+    patience: int, optional
+        _description_, by default 10
     validation_metric : str, optional
         _description_, by default "f1"
     results_output : str | None, optional
@@ -382,6 +388,7 @@ def lstm_hyperparameter_search(
                                                     data_split_seed=data_split_seed,
                                                     k_fold=k_fold,
                                                     n_splits=n_splits,
+                                                    patience = patience,
                                                     verbose_training=False,
                                                     verbose_results=verbose,
                                                     verbose_model=verbose_model)
@@ -449,6 +456,7 @@ def lstm_hyperparameter_search(
             data_split_seed=data_split_seed,
             k_fold=k_fold,
             n_splits=n_splits,
+            patience = patience,
             verbose_training=False,
             verbose_results=False
         )
