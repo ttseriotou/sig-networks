@@ -480,7 +480,7 @@ def swnu_network_hyperparameter_search(
             seed=seed,
             loss=checkpoint["extra_info"]["loss"],
             gamma=checkpoint["extra_info"]["gamma"],
-            batch_size=checkpoint["extra_info"]["batch_size"],,
+            batch_size=checkpoint["extra_info"]["batch_size"],
             augmentation_type=checkpoint["extra_info"]["augmentation_type"],
             hidden_dim_aug = checkpoint["extra_info"]["hidden_dim_aug"],
             comb_method=checkpoint["extra_info"]["comb_method"],
