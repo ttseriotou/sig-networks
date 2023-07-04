@@ -486,7 +486,7 @@ def obtain_mean_history(df: pd.DataFrame,
         id = text[id_column]
         timeline_index = text["timeline_index"]
 
-        # obtain history of the pariicular text
+        # obtain history of the particular text
         history = paths.df[
             (paths.df[id_column] == id) & (paths.df["timeline_index"] <= timeline_index)
         ][colnames]
@@ -519,20 +519,9 @@ def obtain_signatures_history(method: str,
                               id_column: str,
                               label_column: str,
                               embeddings: np.array,
-                              k: int,
                               seed: int = 42,
                               path_indices : list | np.array | None = None,
                               concatenate_current: bool = True) -> torch.tensor:
-    # use nlpsig to construct the path as a numpy array
-    # first define how we construct the path
-    path_specifics = {"pad_by": "history",
-                      "zero_padding": True,
-                      "method": "k_last",
-                      "k": k,
-                      "time_feature": None,
-                      "embeddings": "dim_reduced",
-                      "include_current_embedding": True}
-    
     # first perform dimension reduction on embeddings
     if dimension == embeddings.shape[1]:
         # no need to perform dimensionality reduction
@@ -542,36 +531,68 @@ def obtain_signatures_history(method: str,
                                      n_components=dimension)
         embeddings_reduced = reduction.fit_transform(embeddings,
                                                      random_state=seed)
-    
-    # obtain path by using PrepareData class and .pad method
+        
     paths = nlpsig.PrepareData(original_df=df,
                                id_column=id_column,
                                label_column=label_column,
                                embeddings=embeddings,
                                embeddings_reduced=embeddings_reduced)
-    path = paths.pad(**path_specifics)
-    
+    # obtain column names of the embeddings in paths.df
+    colnames = paths._obtain_colnames(embeddings="dim_reduced")
+
+    # find how many features the signature will have
+    if log_signature:
+        signature_output_channels = signatory.logsignature_channels(
+            in_channels=dimension, depth=sig_depth
+        )
+    else:
+        signature_output_channels = signatory.signature_channels(
+            channels=dimension, depth=sig_depth
+        )
+        
+    # initialise empty array to store mean history
+    print("Computing the path signature of the history for each item in the dataframe")
+    signature_history = torch.zeros((len(df.index), signature_output_channels)).float()
+    for i in tqdm(range(len(df.index))):
+        # look at particular text at a given index
+        text = paths.df.iloc[i]
+        id = text[id_column]
+        timeline_index = text["timeline_index"]
+
+        # obtain history of the particular text
+        history = paths.df[
+            (paths.df[id_column] == id) & (paths.df["timeline_index"] <= timeline_index)
+        ][colnames]
+        
+        # obtain history path as torch tensor
+        history_path = torch.tensor(history.values)
+        
+        # if there's only one post in the history (i.e. itself), we need to pad this
+        # because a path must have at least two points
+        if history_path.shape[0] == 1:
+            history_path = torch.cat([history_path, torch.zeros(history_path.shape)])
+        
+        if log_signature:
+            signature_history[i] = signatory.logsignature(torch.stack([history_path]),
+                                                          sig_depth).float()
+        else:
+            signature_history[i] = signatory.signature(torch.stack([history_path]),
+                                                       sig_depth).float()
+        
     # slice the path in specified way
     if path_indices is not None:
-        path = path[path_indices]
+        signature_history = signature_history[path_indices]
         embeddings = embeddings[path_indices]
-
-    # remove last two columns (which contains the id and the label)
-    path = path[:,:,:-2].astype("float")
     
-    # convert to torch tensor to compute signature using signatory
-    path = torch.from_numpy(path).float()
-    if log_signature:
-        sig = signatory.signature(path, sig_depth).float()
-    else:
-        sig = signatory.logsignature(path, sig_depth).float()
-    
-    # concatenate with current embedding
+    # concatenate with current embedding (and convert to torch tensor)
     if concatenate_current:
-        sig = torch.cat([sig, torch.from_numpy(embeddings)],
-                        dim=1)
+        signature_history = torch.cat([signature_history,
+                                       torch.from_numpy(embeddings)],
+                                      dim=1).float()
+    else:
+        signature_history = signature_history.float()
 
-    return sig
+    return signature_history
 
 
 def histories_baseline_hyperparameter_search(
@@ -593,7 +614,6 @@ def histories_baseline_hyperparameter_search(
     log_signature: bool = False,
     dim_reduce_methods: list[str] | None = None,
     dimension_and_sig_depths: list[tuple[int, int]] | None = None,
-    history_lengths: list[int] = [10],
     path_indices : list | np.array | None = None,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
@@ -622,77 +642,70 @@ def histories_baseline_hyperparameter_search(
     results_df = pd.DataFrame()
     model_id = 0
     if use_signatures:
-        for k in tqdm(history_lengths):
-            if verbose:
-                print("\n" + "-" * 50)
-                print(f"k: {k}")
-            for dimension, sig_depth in tqdm(dimension_and_sig_depths):
-                for method in tqdm(dim_reduce_methods):
-                    if verbose:
-                        print("\n" + "#" * 50)
-                        print(f"dimension: {dimension} | "
-                            f"sig_depth: {sig_depth} | "
-                            f"method: {method}")
-                    
-                    # obtain the ffn input by dimension reduction and computing signatures
-                    x_data = obtain_signatures_history(
-                        method=method,
-                        dimension=dimension,
-                        sig_depth=sig_depth,
-                        log_signature=log_signature,
-                        df=df,
-                        id_column=id_column,
-                        label_column=label_column,
-                        embeddings=embeddings,
-                        k=k,
-                        path_indices=path_indices,
-                        concatenate_current=True
-                    )
+        for dimension, sig_depth in tqdm(dimension_and_sig_depths):
+            for method in tqdm(dim_reduce_methods):
+                if verbose:
+                    print("\n" + "#" * 50)
+                    print(f"dimension: {dimension} | "
+                          f"sig_depth: {sig_depth} | "
+                          f"method: {method}")
+                
+                # obtain the ffn input by dimension reduction and computing signatures
+                x_data = obtain_signatures_history(
+                    method=method,
+                    dimension=dimension,
+                    sig_depth=sig_depth,
+                    log_signature=log_signature,
+                    df=df,
+                    id_column=id_column,
+                    label_column=label_column,
+                    embeddings=embeddings,
+                    path_indices=path_indices,
+                    concatenate_current=True
+                )
 
-                    # perform hyperparameter search for FFN
-                    results, _, best_valid_metric, FFN_info = ffn_hyperparameter_search(
-                        num_epochs=num_epochs,
-                        x_data=x_data,
-                        y_data=y_data,
-                        output_dim=output_dim,
-                        hidden_dim_sizes=hidden_dim_sizes,
-                        dropout_rates=dropout_rates,
-                        learning_rates=learning_rates,
-                        seeds=seeds,
-                        loss=loss,
-                        gamma=gamma,
-                        batch_size=batch_size,
-                        data_split_seed=data_split_seed,
-                        split_ids=split_ids,
-                        split_indices=split_indices,
-                        k_fold=k_fold,
-                        n_splits=n_splits,
-                        patience=patience,
-                        validation_metric=validation_metric,
-                        results_output=None,
-                        verbose=False
-                    )
+                # perform hyperparameter search for FFN
+                results, _, best_valid_metric, FFN_info = ffn_hyperparameter_search(
+                    num_epochs=num_epochs,
+                    x_data=x_data,
+                    y_data=y_data,
+                    output_dim=output_dim,
+                    hidden_dim_sizes=hidden_dim_sizes,
+                    dropout_rates=dropout_rates,
+                    learning_rates=learning_rates,
+                    seeds=seeds,
+                    loss=loss,
+                    gamma=gamma,
+                    batch_size=batch_size,
+                    data_split_seed=data_split_seed,
+                    split_ids=split_ids,
+                    split_indices=split_indices,
+                    k_fold=k_fold,
+                    n_splits=n_splits,
+                    patience=patience,
+                    validation_metric=validation_metric,
+                    results_output=None,
+                    verbose=False
+                )
 
-                    # concatenate to results dataframe
-                    results["k"] = k
-                    results["input_dim"] = x_data.shape[1]
-                    results["dimension"] = dimension
-                    results["sig_depth"] = sig_depth
-                    results["method"] = method
-                    results["log_signature"] = log_signature
-                    results["model_id"] = [float(f"{model_id}.{id}") for id in results["model_id"]]
-                    results_df = pd.concat([results_df, results])
-                    
-                    best_model(current_valid_metric=best_valid_metric,
-                            extra_info={"k": k,
-                                        "input_dim": x_data.shape[1],
-                                        "dimension": dimension,
-                                        "sig_depth": sig_depth,
-                                        "method": method,
-                                        "log_signature": log_signature,
-                                        **FFN_info})
-                    
-                    model_id += 1
+                # concatenate to results dataframe
+                results["input_dim"] = x_data.shape[1]
+                results["dimension"] = dimension
+                results["sig_depth"] = sig_depth
+                results["method"] = method
+                results["log_signature"] = log_signature
+                results["model_id"] = [float(f"{model_id}.{id}") for id in results["model_id"]]
+                results_df = pd.concat([results_df, results])
+                
+                best_model(current_valid_metric=best_valid_metric,
+                        extra_info={"input_dim": x_data.shape[1],
+                                    "dimension": dimension,
+                                    "sig_depth": sig_depth,
+                                    "method": method,
+                                    "log_signature": log_signature,
+                                    **FFN_info})
+                
+                model_id += 1
     else:
         # obtain the ffn input by averaging over history
         x_data = obtain_mean_history(df=df,
@@ -753,7 +766,6 @@ def histories_baseline_hyperparameter_search(
                                            id_column=id_column,
                                            label_column=label_column,
                                            embeddings=embeddings,
-                                           k=checkpoint["extra_info"]["k"],
                                            path_indices=path_indices,
                                            concatenate_current=True)
     else:
@@ -796,8 +808,6 @@ def histories_baseline_hyperparameter_search(
         test_results["loss"] = loss
         test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
-        if use_signatures:
-            test_results["k"] = checkpoint["extra_info"]["k"]
         test_results["input_dim"] = checkpoint["extra_info"]["input_dim"]
         if use_signatures:
             test_results["dimension"] = checkpoint["extra_info"]["dimension"]
