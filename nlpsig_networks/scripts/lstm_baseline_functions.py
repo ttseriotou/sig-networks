@@ -395,7 +395,7 @@ def lstm_hyperparameter_search(
                         results["k"] = k
                         results["num_layers"] = num_layers,
                         results["bidirectional"] = bidirectional
-                        results["hidden_dim"] = [hidden_dim for _ in range(len(results.index))]
+                        results["hidden_dim"] = hidden_dim
                         results["dropout_rate"] = dropout
                         results["learning_rate"] = lr
                         results["seed"] = seed
