@@ -584,7 +584,7 @@ def obtain_signatures_history(method: str,
         signature_history = signature_history[path_indices]
         embeddings = embeddings[path_indices]
     
-    # concatenate with current embedding (and convert to torch tensor)
+    # concatenate with current embedding
     if concatenate_current:
         signature_history = torch.cat([signature_history,
                                        torch.from_numpy(embeddings)],
