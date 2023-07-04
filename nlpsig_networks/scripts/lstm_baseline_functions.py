@@ -5,6 +5,7 @@ from nlpsig.classification_utils import DataSplits, Folds
 from nlpsig_networks.pytorch_utils import _get_timestamp, SaveBestModel, training_pytorch, testing_pytorch, set_seed, KFold_pytorch
 from nlpsig_networks.lstm_baseline import LSTMModel
 from nlpsig_networks.focal_loss import FocalLoss
+from typing import Iterable
 import torch
 import numpy as np
 import pandas as pd

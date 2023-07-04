@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import nlpsig
 from nlpsig.classification_utils import DataSplits, Folds
-from nlpsig_networks.pytorch_utils import SaveBestModel, training_pytorch, testing_pytorch, set_seed, KFold_pytorch
+from nlpsig_networks.pytorch_utils import _get_timestamp, SaveBestModel, training_pytorch, testing_pytorch, set_seed, KFold_pytorch
 from nlpsig_networks.swnu_network import SWNUNetwork
 from nlpsig_networks.focal_loss import FocalLoss
+from typing import Iterable
 import torch
 import numpy as np
 import pandas as pd
@@ -134,9 +135,9 @@ def implement_swnu_network(
     x_data = x_data.float()
     
     # set some variables for training
-    save_best = True
+    return_best = True
     early_stopping = True
-    model_output = "best_model.pkl"
+    model_output = f"best_model_{_get_timestamp()}.pkl"
     validation_metric = "f1"
     weight_decay_adam = 0.0001
     
@@ -172,7 +173,7 @@ def implement_swnu_network(
                                 num_epochs=num_epochs,
                                 batch_size=batch_size,
                                 seed=seed,
-                                save_best=save_best,
+                                return_best=return_best,
                                 early_stopping=early_stopping,
                                 validation_metric=validation_metric,
                                 patience=patience,
@@ -212,7 +213,7 @@ def implement_swnu_network(
                                       num_epochs=num_epochs,
                                       valid_loader=valid,
                                       seed=seed,
-                                      save_best=save_best,
+                                      return_best=return_best,
                                       output=model_output,
                                       early_stopping=early_stopping,
                                       validation_metric=validation_metric,
@@ -220,24 +221,25 @@ def implement_swnu_network(
                                       verbose=verbose_training)
         
         # evaluate on validation
+        valid_results = testing_pytorch(model=swnu_network_model,
+                                        test_loader=valid,
+                                        criterion=criterion,
+                                        verbose=False)
+        
+        # evaluate on test
         test_results = testing_pytorch(model=swnu_network_model,
                                        test_loader=test,
                                        criterion=criterion,
                                        verbose=False)
         
-        # evaluate on test
-        valid_results = testing_pytorch(model=swnu_network_model,
-                                        test_loader=valid,
-                                        criterion=criterion)
-        
         results = pd.DataFrame({"loss": test_results["loss"],
                                 "accuracy": test_results["accuracy"], 
                                 "f1": test_results["f1"],
-                                "f1_scores": test_results["f1_scores"],
+                                "f1_scores": [test_results["f1_scores"]],
                                 "valid_loss": valid_results["loss"],
                                 "valid_accuracy": valid_results["accuracy"], 
                                 "valid_f1": valid_results["f1"],
-                                "valid_f1_scores": valid_results["f1_scores"]})
+                                "valid_f1_scores": [valid_results["f1_scores"]]})
 
     if verbose_results:
         with pd.option_context('display.precision', 3):
@@ -269,7 +271,7 @@ def swnu_network_hyperparameter_search(
     ffn_hidden_dim_sizes: list[int] | list[list[int]],
     dropout_rates: list[float],
     learning_rates: list[float],
-    BiLSTM,
+    BiLSTM: bool,
     seeds : list[int],
     loss: str,
     gamma: float = 0.0,
@@ -295,17 +297,17 @@ def swnu_network_hyperparameter_search(
         raise ValueError("validation_metric must be either 'loss', 'accuracy' or 'f1'")
     
     # initialise SaveBestModel class
-    model_output = "best_swnu_network_model.pkl",
+    model_output = f"best_swnu_network_model_{_get_timestamp()}.pkl"
     save_best_model = SaveBestModel(metric=validation_metric,
                                     output=model_output,
                                     verbose=verbose)
-    
-    results_df = pd.DataFrame()
-    model_id = 0
 
     if isinstance(time_feature, str):
         time_feature = [time_feature]
     
+    # find model parameters that has the best validation
+    results_df = pd.DataFrame()
+    model_id = 0
     for k in tqdm(history_lengths):
         if verbose:
             print("\n" + "-" * 50)
@@ -331,7 +333,7 @@ def swnu_network_hyperparameter_search(
         
                 for lstm_hidden_dim in tqdm(swnu_hidden_dim_sizes):
                     for ffn_hidden_dim in tqdm(ffn_hidden_dim_sizes):
-                        for sig_depth in sig_depths:
+                        for sig_depth in tqdm(sig_depths):
                             for output_channels in tqdm(conv_output_channels):
                                 for dropout in tqdm(dropout_rates):
                                     for lr in tqdm(learning_rates):
@@ -391,6 +393,9 @@ def swnu_network_hyperparameter_search(
                                             results["method"] = method
                                             results["input_channels"] = input_channels
                                             results["output_channels"] = output_channels
+                                            results["time_feature"] = time_feature
+                                            results["standardise_method"] = standardise_method
+                                            results["add_time_in_path"] = add_time_in_path
                                             results["num_time_features"] = len(time_feature)
                                             results["embedding_dim"] = embedding_dim
                                             results["log_signature"] = log_signature
@@ -404,7 +409,7 @@ def swnu_network_hyperparameter_search(
                                             results["gamma"] = gamma
                                             results["k_fold"] = k_fold
                                             results["augmentation_type"] = augmentation_type
-                                            results["hidden_dim_aug"] = [hidden_dim_aug for _ in range(len(results.index))]
+                                            results["hidden_dim_aug"] = [hidden_dim_aug for _ in range(len(results.index))] if hidden_dim_aug is not None else None
                                             results["comb_method"] = comb_method
                                             results["model_id"] = model_id
                                             results_df = pd.concat([results_df, results])
@@ -427,6 +432,9 @@ def swnu_network_hyperparameter_search(
                                                             "method": method,
                                                             "input_channels": input_channels,
                                                             "output_channels": output_channels,
+                                                            "time_feature": time_feature,
+                                                            "standardise_method": standardise_method,
+                                                            "add_time_in_path": add_time_in_path,
                                                             "num_time_features": len(time_feature),
                                                             "embedding_dim": embedding_dim,
                                                             "log_signature": log_signature,
@@ -440,7 +448,7 @@ def swnu_network_hyperparameter_search(
                                                             "batch_size": batch_size,
                                                             "augmentation_type": augmentation_type,
                                                             "hidden_dim_aug": hidden_dim_aug,
-                                                            "comb_method": comb_method
+                                                            "comb_method": comb_method,
                                                         })
 
     checkpoint = torch.load(f=model_output)
@@ -449,14 +457,19 @@ def swnu_network_hyperparameter_search(
         print("The best model had the following parameters:")
         print(checkpoint["extra_info"])
 
-    x_data, input_channels = obtain_SWNUNetwork_input(method=checkpoint["extra_info"]["method"],
-                                               dimension=checkpoint["extra_info"]["k"],
-                                               df=df,
-                                               id_column=id_column,
-                                               label_column=label_column,
-                                               embeddings=embeddings,
-                                               k=checkpoint["extra_info"]["k"],
-                                               path_indices=path_indices)
+    x_data, input_channels = obtain_SWNUNetwork_input(
+        method=checkpoint["extra_info"]["method"],
+        dimension=checkpoint["extra_info"]["dimensions"],
+        df=df,
+        id_column=id_column,
+        label_column=label_column,
+        embeddings=embeddings,
+        k=checkpoint["extra_info"]["k"],
+        time_feature=checkpoint["extra_info"]["time_feature"],
+        standardise_method=checkpoint["extra_info"]["standardise_method"],
+        add_time_in_path=checkpoint["extra_info"]["add_time_in_path"],
+        path_indices=path_indices
+    )
 
     test_scores = []
     test_results_df = pd.DataFrame()
@@ -522,7 +535,8 @@ def swnu_network_hyperparameter_search(
         test_results["gamma"] = checkpoint["extra_info"]["gamma"]
         test_results["k_fold"] = k_fold
         test_results["augmentation_type"] = checkpoint["extra_info"]["augmentation_type"]
-        test_results["hidden_dim_aug"] = checkpoint["extra_info"]["hidden_dim_aug"]
+        test_results["hidden_dim_aug"] = [checkpoint["extra_info"]["hidden_dim_aug"]
+                                           for _ in range(len(test_results.index))]
         test_results["comb_method"] = checkpoint["extra_info"]["comb_method"]
         test_results_df = pd.concat([test_results_df, test_results])
         
