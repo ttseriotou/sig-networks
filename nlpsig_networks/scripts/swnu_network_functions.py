@@ -300,8 +300,8 @@ def swnu_network_hyperparameter_search(
                                             results["num_time_features"] = len(time_feature)
                                             results["embedding_dim"] = embedding_dim
                                             results["log_signature"] = log_signature
-                                            results["lstm_hidden_dim"] = [lstm_hidden_dim for _ in range(len(results.index))]
-                                            results["ffn_hidden_dim"] = [ffn_hidden_dim for _ in range(len(results.index))]
+                                            results["lstm_hidden_dim"] = [tuple(lstm_hidden_dim) for _ in range(len(results.index))]
+                                            results["ffn_hidden_dim"] = [tuple(ffn_hidden_dim) for _ in range(len(results.index))]
                                             results["dropout_rate"] = dropout
                                             results["learning_rate"] = lr
                                             results["seed"] = seed
@@ -422,9 +422,9 @@ def swnu_network_hyperparameter_search(
         test_results["num_time_features"] = len(time_feature)
         test_results["embedding_dim"] = embedding_dim
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
-        test_results["lstm_hidden_dim"] = [checkpoint["extra_info"]["lstm_hidden_dim"]
+        test_results["lstm_hidden_dim"] = [tuple(checkpoint["extra_info"]["lstm_hidden_dim"])
                                            for _ in range(len(test_results.index))]
-        test_results["ffn_hidden_dim"] = [checkpoint["extra_info"]["ffn_hidden_dim"]
+        test_results["ffn_hidden_dim"] = [tuple(checkpoint["extra_info"]["ffn_hidden_dim"])
                                           for _ in range(len(test_results.index))]
         test_results["dropout_rate"] = checkpoint["extra_info"]["dropout_rate"]
         test_results["learning_rate"] = checkpoint["extra_info"]["learning_rate"]
