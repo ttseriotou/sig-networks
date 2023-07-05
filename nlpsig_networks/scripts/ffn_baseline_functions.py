@@ -491,14 +491,11 @@ def obtain_signatures_history(method: str,
     
     # concatenate with current embedding
     if concatenate_current:
-        signature_history = torch.cat([signature_history,
+        return torch.cat([signature_history,
                                        torch.from_numpy(embeddings)],
                                       dim=1).float()
     else:
-        signature_history = signature_history.float()
-
-    return signature_history
-
+        return signature_history.float()
 
 def histories_baseline_hyperparameter_search(
     num_epochs: int,
