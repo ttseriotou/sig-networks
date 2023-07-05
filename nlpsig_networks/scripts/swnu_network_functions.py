@@ -310,7 +310,7 @@ def swnu_network_hyperparameter_search(
                                             results["gamma"] = gamma
                                             results["k_fold"] = k_fold
                                             results["augmentation_type"] = augmentation_type
-                                            results["hidden_dim_aug"] = [hidden_dim_aug for _ in range(len(results.index))] if hidden_dim_aug is not None else None
+                                            results["hidden_dim_aug"] = [tuple(hidden_dim_aug) for _ in range(len(results.index))] if hidden_dim_aug is not None else None
                                             results["comb_method"] = comb_method
                                             results["batch_size"] = batch_size
                                             results["model_id"] = model_id
@@ -434,8 +434,8 @@ def swnu_network_hyperparameter_search(
         test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
         test_results["augmentation_type"] = checkpoint["extra_info"]["augmentation_type"]
-        test_results["hidden_dim_aug"] = [checkpoint["extra_info"]["hidden_dim_aug"]
-                                           for _ in range(len(test_results.index))]
+        test_results["hidden_dim_aug"] = [tuple(checkpoint["extra_info"]["hidden_dim_aug"])
+                                           for _ in range(len(test_results.index))] if checkpoint["extra_info"]["hidden_dim_aug"] is not None else None
         test_results["comb_method"] = checkpoint["extra_info"]["comb_method"]
         test_results["batch_size"] = batch_size
         test_results_df = pd.concat([test_results_df, test_results])
