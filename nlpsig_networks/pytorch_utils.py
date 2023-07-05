@@ -126,7 +126,7 @@ class SaveBestModel:
                  metric: str,
                  best_valid_metric: float | None = None,
                  best_train_metric: float | None = None,
-                 output: str = f"best_model_{_get_timestamp()}.pkl",
+                 output: str = f"save_best_model_{_get_timestamp()}.pkl",
                  verbose: bool = False):
         """
         Class to save the best model while training. If the current epoch's 
@@ -157,7 +157,7 @@ class SaveBestModel:
             This can be used for making a decision between two models which
             have the same validation score.
         output : str, optional
-            Where to store the best model, by default "best_model_{timestamp}.pkl".
+            Where to store the best model, by default "save_best_model_{timestamp}.pkl".
             where timestamp is the time of initialising
         verbose : bool, optional
             Whether or not to print out progress, by default False.

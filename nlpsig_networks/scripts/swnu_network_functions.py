@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import nlpsig
-from nlpsig.classification_utils import DataSplits, Folds
-from nlpsig_networks.pytorch_utils import _get_timestamp, SaveBestModel, training_pytorch, testing_pytorch, set_seed, KFold_pytorch
+from nlpsig_networks.pytorch_utils import _get_timestamp, SaveBestModel, set_seed
 from nlpsig_networks.swnu_network import SWNUNetwork
-from nlpsig_networks.focal_loss import FocalLoss
+from nlpsig_networks.scripts.implement_model import implement_model
 from typing import Iterable
 import torch
 import numpy as np
@@ -68,6 +67,7 @@ def obtain_SWNUNetwork_input(
         include_embedding_in_input=True,
         reduced_embeddings=False
     )
+    
     
 def implement_swnu_network(
     num_epochs: int,
@@ -134,122 +134,23 @@ def implement_swnu_network(
         y_data = torch.tensor(y_data)
     x_data = x_data.float()
     
-    # set some variables for training
-    return_best = True
-    early_stopping = True
-    model_output = f"best_model_{_get_timestamp()}.pkl"
-    validation_metric = "f1"
-    weight_decay_adam = 0.0001
-    
-    if k_fold:
-        # perform KFold evaluation and return the performance on validation and test sets
-        # split dataset
-        folds = Folds(x_data=x_data,
-                      y_data=y_data,
-                      groups=split_ids,
-                      n_splits=n_splits,
-                      indices=split_indices,
-                      shuffle=True,
-                      random_state=data_split_seed)
-        
-         # define loss
-        if loss == "focal":
-            criterion = FocalLoss(gamma = gamma)
-        elif loss == "cross_entropy":
-            criterion = torch.nn.CrossEntropyLoss()
-        else:
-            raise ValueError("criterion must be either 'focal' or 'cross_entropy'")
-
-        # define optimizer
-        optimizer = torch.optim.Adam(swnu_network_model.parameters(), lr=learning_rate, weight_decay= weight_decay_adam)
-        
-        # perform k-fold evaluation which returns a dataframe with columns for the
-        # loss, accuracy, f1 (macro) and individual f1-scores for each fold
-        # (for both validation and test set)
-        results = KFold_pytorch(folds=folds,
-                                model=swnu_network_model,
-                                criterion=criterion,
-                                optimizer=optimizer,
-                                num_epochs=num_epochs,
-                                batch_size=batch_size,
-                                seed=seed,
-                                return_best=return_best,
-                                early_stopping=early_stopping,
-                                validation_metric=validation_metric,
-                                patience=patience,
-                                verbose=verbose_training)
-    else:
-        # split dataset
-        data_loader_args = {"batch_size": batch_size, "shuffle": True}
-
-        split_data = DataSplits(x_data=x_data,
-                                y_data=y_data,
-                                groups=split_ids,
-                                train_size=0.8,
-                                valid_size=0.2,
-                                indices=split_indices,
-                                shuffle=True,
-                                random_state=data_split_seed)
-        train, valid, test = split_data.get_splits(as_DataLoader=True, data_loader_args=data_loader_args)
-
-        # define loss
-        if loss == "focal":
-            criterion = FocalLoss(gamma = gamma)
-            y_train = split_data.get_splits(as_DataLoader=False)[1]
-            criterion.set_alpha_from_y(y=y_train)
-        elif loss == "cross_entropy":
-            criterion = torch.nn.CrossEntropyLoss()
-        else:
-            raise ValueError("criterion must be either 'focal' or 'cross_entropy'")
-
-        # define optimizer
-        optimizer = torch.optim.Adam(swnu_network_model.parameters(), lr=learning_rate, weight_decay= weight_decay_adam)
-        
-        # train FFN
-        swnu_network_model = training_pytorch(model=swnu_network_model,
-                                      train_loader=train,
-                                      criterion=criterion,
-                                      optimizer=optimizer,
-                                      num_epochs=num_epochs,
-                                      valid_loader=valid,
-                                      seed=seed,
-                                      return_best=return_best,
-                                      output=model_output,
-                                      early_stopping=early_stopping,
-                                      validation_metric=validation_metric,
-                                      patience=patience,
-                                      verbose=verbose_training)
-        
-        # evaluate on validation
-        valid_results = testing_pytorch(model=swnu_network_model,
-                                        test_loader=valid,
-                                        criterion=criterion,
-                                        verbose=False)
-        
-        # evaluate on test
-        test_results = testing_pytorch(model=swnu_network_model,
-                                       test_loader=test,
-                                       criterion=criterion,
-                                       verbose=False)
-        
-        results = pd.DataFrame({"loss": test_results["loss"],
-                                "accuracy": test_results["accuracy"], 
-                                "f1": test_results["f1"],
-                                "f1_scores": [test_results["f1_scores"]],
-                                "valid_loss": valid_results["loss"],
-                                "valid_accuracy": valid_results["accuracy"], 
-                                "valid_f1": valid_results["f1"],
-                                "valid_f1_scores": [valid_results["f1_scores"]]})
-
-    if verbose_results:
-        with pd.option_context('display.precision', 3):
-            print(results)
-            
-    # remove any models that have been saved
-    if os.path.exists(model_output):
-        os.remove(model_output)
-        
-    return swnu_network_model, results
+    return implement_model(model=swnu_network_model,
+                           num_epochs=num_epochs,
+                           x_data=x_data,
+                           y_data=y_data,
+                           learning_rate=learning_rate,
+                           seed=seed,
+                           loss=loss,
+                           gamma=gamma,
+                           batch_size=batch_size,
+                           data_split_seed=data_split_seed,
+                           split_ids=split_ids,
+                           split_indices=split_indices,
+                           k_fold=k_fold,
+                           n_splits=n_splits,
+                           patience=patience,
+                           verbose_training=verbose_training,
+                           verbose_results=verbose_results)
 
 
 def swnu_network_hyperparameter_search(
@@ -411,6 +312,7 @@ def swnu_network_hyperparameter_search(
                                             results["augmentation_type"] = augmentation_type
                                             results["hidden_dim_aug"] = [hidden_dim_aug for _ in range(len(results.index))] if hidden_dim_aug is not None else None
                                             results["comb_method"] = comb_method
+                                            results["batch_size"] = batch_size
                                             results["model_id"] = model_id
                                             results_df = pd.concat([results_df, results])
                                             
@@ -443,9 +345,6 @@ def swnu_network_hyperparameter_search(
                                                             "dropout_rate": dropout,
                                                             "learning_rate": lr,
                                                             "BiLSTM": BiLSTM,
-                                                            "loss": loss,
-                                                            "gamma": gamma,
-                                                            "batch_size": batch_size,
                                                             "augmentation_type": augmentation_type,
                                                             "hidden_dim_aug": hidden_dim_aug,
                                                             "comb_method": comb_method,
@@ -491,9 +390,9 @@ def swnu_network_hyperparameter_search(
             dropout_rate=checkpoint["extra_info"]["dropout_rate"],
             learning_rate=checkpoint["extra_info"]["learning_rate"],
             seed=seed,
-            loss=checkpoint["extra_info"]["loss"],
-            gamma=checkpoint["extra_info"]["gamma"],
-            batch_size=checkpoint["extra_info"]["batch_size"],
+            loss=loss,
+            gamma=gamma,
+            batch_size=batch_size,
             augmentation_type=checkpoint["extra_info"]["augmentation_type"],
             hidden_dim_aug = checkpoint["extra_info"]["hidden_dim_aug"],
             comb_method=checkpoint["extra_info"]["comb_method"],
@@ -531,13 +430,14 @@ def swnu_network_hyperparameter_search(
         test_results["learning_rate"] = checkpoint["extra_info"]["learning_rate"]
         test_results["seed"] = seed
         test_results["BiLSTM"] = checkpoint["extra_info"]["BiLSTM"]
-        test_results["loss"] = checkpoint["extra_info"]["loss"]
-        test_results["gamma"] = checkpoint["extra_info"]["gamma"]
+        test_results["loss"] = loss
+        test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
         test_results["augmentation_type"] = checkpoint["extra_info"]["augmentation_type"]
         test_results["hidden_dim_aug"] = [checkpoint["extra_info"]["hidden_dim_aug"]
                                            for _ in range(len(test_results.index))]
         test_results["comb_method"] = checkpoint["extra_info"]["comb_method"]
+        test_results["batch_size"] = batch_size
         test_results_df = pd.concat([test_results_df, test_results])
         
     test_scores_mean = sum(test_scores)/len(test_scores)
