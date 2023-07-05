@@ -402,8 +402,7 @@ def lstm_hyperparameter_search(
         
         test_results["num_layers"] = checkpoint["extra_info"]["num_layers"]
         test_results["bidirectional"] = checkpoint["extra_info"]["bidirectional"]
-        test_results["hidden_dim"] = [checkpoint["extra_info"]["hidden_dim"]
-                                      for _ in range(len(results.index))]
+        test_results["hidden_dim"] = checkpoint["extra_info"]["hidden_dim"]
         test_results["dropout_rate"] = checkpoint["extra_info"]["dropout_rate"]
         test_results["learning_rate"] = checkpoint["extra_info"]["learning_rate"]
         test_results["seed"] = seed

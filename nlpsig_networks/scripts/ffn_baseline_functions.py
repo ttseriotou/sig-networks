@@ -273,7 +273,7 @@ def ffn_hyperparameter_search(
                     scores.append(results[f"valid_{validation_metric}"].mean())
                     
                     # concatenate to results dataframe
-                    results["hidden_dim"] = [hidden_dim for _ in range(len(results.index))]
+                    results["hidden_dim"] = [tuple(hidden_dim) for _ in range(len(results.index))]
                     results["dropout_rate"] = dropout
                     results["learning_rate"] = lr
                     results["seed"] = seed
@@ -329,7 +329,7 @@ def ffn_hyperparameter_search(
                                         verbose_training=False,
                                         verbose_results=False)
         
-        test_results["hidden_dim"] = [checkpoint["extra_info"]["hidden_dim"]
+        test_results["hidden_dim"] = [tuple(checkpoint["extra_info"]["hidden_dim"])
                                       for _ in range(len(results.index))]
         test_results["dropout_rate"] = checkpoint["extra_info"]["dropout_rate"]
         test_results["learning_rate"] = checkpoint["extra_info"]["learning_rate"]
@@ -703,7 +703,7 @@ def histories_baseline_hyperparameter_search(
                                         verbose_training=False,
                                         verbose_results=False)
         
-        test_results["hidden_dim"] = [checkpoint["extra_info"]["hidden_dim"]
+        test_results["hidden_dim"] = [tuple(checkpoint["extra_info"]["hidden_dim"])
                                       for _ in range(len(test_results.index))]
         test_results["dropout_rate"] = checkpoint["extra_info"]["dropout_rate"]
         test_results["learning_rate"] = checkpoint["extra_info"]["learning_rate"]
