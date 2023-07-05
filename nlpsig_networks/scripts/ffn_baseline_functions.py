@@ -714,7 +714,7 @@ def histories_baseline_hyperparameter_search(
         test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
         test_results["n_splits"] = n_splits if k_fold else None
-        test_results["batch_size"] = checkpoint["extra_info"]["batch_size"]
+        test_results["batch_size"] = batch_size
         test_results["input_dim"] = checkpoint["extra_info"]["input_dim"]
         if use_signatures:
             test_results["dimension"] = checkpoint["extra_info"]["dimension"]
