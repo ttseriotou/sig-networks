@@ -300,8 +300,8 @@ def swnu_network_hyperparameter_search(
                                             results["num_time_features"] = len(time_feature)
                                             results["embedding_dim"] = embedding_dim
                                             results["log_signature"] = log_signature
-                                            results["lstm_hidden_dim"] = [tuple(lstm_hidden_dim) for _ in range(len(results.index))]
-                                            results["ffn_hidden_dim"] = [tuple(ffn_hidden_dim) for _ in range(len(results.index))]
+                                            results["lstm_hidden_dim"] = [tuple([lstm_hidden_dim]) for _ in range(len(results.index))] if (type(lstm_hidden_dim)==int) else [tuple(lstm_hidden_dim) for _ in range(len(results.index))]
+                                            results["ffn_hidden_dim"] = [tuple([ffn_hidden_dim]) for _ in range(len(results.index))] if (type(ffn_hidden_dim)==int) else [tuple(lstm_hidden_dim) for _ in range(len(results.index))]
                                             results["dropout_rate"] = dropout
                                             results["learning_rate"] = lr
                                             results["seed"] = seed
@@ -311,7 +311,7 @@ def swnu_network_hyperparameter_search(
                                             results["k_fold"] = k_fold
                                             results["n_splits"] = n_splits if k_fold else None
                                             results["augmentation_type"] = augmentation_type
-                                            results["hidden_dim_aug"] = [tuple(hidden_dim_aug) for _ in range(len(results.index))] if hidden_dim_aug is not None else None
+                                            results["hidden_dim_aug"] = None if hidden_dim_aug is None else [tuple([hidden_dim_aug]) for _ in range(len(results.index))] if (type(hidden_dim_aug)==int) else [tuple(hidden_dim_aug) for _ in range(len(results.index))]
                                             results["comb_method"] = comb_method
                                             results["batch_size"] = batch_size
                                             results["model_id"] = model_id
@@ -423,10 +423,10 @@ def swnu_network_hyperparameter_search(
         test_results["num_time_features"] = len(time_feature)
         test_results["embedding_dim"] = embedding_dim
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
-        test_results["lstm_hidden_dim"] = [tuple(checkpoint["extra_info"]["lstm_hidden_dim"])
-                                           for _ in range(len(test_results.index))]
-        test_results["ffn_hidden_dim"] = [tuple(checkpoint["extra_info"]["ffn_hidden_dim"])
-                                          for _ in range(len(test_results.index))]
+        test_results["lstm_hidden_dim"] = [tuple([checkpoint["extra_info"]["lstm_hidden_dim"]]) 
+                                          for _ in range(len(test_results.index))] if (type(checkpoint["extra_info"]["lstm_hidden_dim"])==int) else [tuple(checkpoint["extra_info"]["lstm_hidden_dim"]) for _ in range(len(test_results.index))]
+        test_results["ffn_hidden_dim"] = [tuple([checkpoint["extra_info"]["ffn_hidden_dim"]]) 
+                                          for _ in range(len(test_results.index))] if (type(checkpoint["extra_info"]["ffn_hidden_dim"])==int) else [tuple(checkpoint["extra_info"]["ffn_hidden_dim"]) for _ in range(len(test_results.index))]
         test_results["dropout_rate"] = checkpoint["extra_info"]["dropout_rate"]
         test_results["learning_rate"] = checkpoint["extra_info"]["learning_rate"]
         test_results["seed"] = seed
@@ -436,8 +436,7 @@ def swnu_network_hyperparameter_search(
         test_results["k_fold"] = k_fold
         test_results["n_splits"] = n_splits if k_fold else None
         test_results["augmentation_type"] = checkpoint["extra_info"]["augmentation_type"]
-        test_results["hidden_dim_aug"] = [tuple(checkpoint["extra_info"]["hidden_dim_aug"])
-                                           for _ in range(len(test_results.index))] if checkpoint["extra_info"]["hidden_dim_aug"] is not None else None
+        test_results["hidden_dim_aug"] = None if checkpoint["extra_info"]["hidden_dim_aug"] is None else [tuple([checkpoint["extra_info"]["hidden_dim_aug"]]) for _ in range(len(test_results.index))] if (type(checkpoint["extra_info"]["hidden_dim_aug"])==int) else [tuple(checkpoint["extra_info"]["hidden_dim_aug"]) for _ in range(len(test_results.index))]
         test_results["comb_method"] = checkpoint["extra_info"]["comb_method"]
         test_results["batch_size"] = batch_size
         test_results_df = pd.concat([test_results_df, test_results])
