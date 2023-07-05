@@ -309,6 +309,7 @@ def swnu_network_hyperparameter_search(
                                             results["loss"] = loss
                                             results["gamma"] = gamma
                                             results["k_fold"] = k_fold
+                                            results["n_splits"] = n_splits if k_fold else None
                                             results["augmentation_type"] = augmentation_type
                                             results["hidden_dim_aug"] = [tuple(hidden_dim_aug) for _ in range(len(results.index))] if hidden_dim_aug is not None else None
                                             results["comb_method"] = comb_method
@@ -433,6 +434,7 @@ def swnu_network_hyperparameter_search(
         test_results["loss"] = loss
         test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
+        test_results["n_splits"] = n_splits if k_fold else None
         test_results["augmentation_type"] = checkpoint["extra_info"]["augmentation_type"]
         test_results["hidden_dim_aug"] = [tuple(checkpoint["extra_info"]["hidden_dim_aug"])
                                            for _ in range(len(test_results.index))] if checkpoint["extra_info"]["hidden_dim_aug"] is not None else None

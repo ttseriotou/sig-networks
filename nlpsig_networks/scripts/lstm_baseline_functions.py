@@ -344,6 +344,7 @@ def lstm_hyperparameter_search(
                         results["loss"] = loss
                         results["gamma"] = gamma
                         results["k_fold"] = k_fold
+                        results["n_splits"] = n_splits if k_fold else None
                         results["batch_size"] = batch_size
                         results["model_id"] = model_id
                         results_df = pd.concat([results_df, results])
@@ -409,6 +410,7 @@ def lstm_hyperparameter_search(
         test_results["loss"] = loss
         test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
+        test_results["n_splits"] = n_splits if k_fold else None
         test_results["batch_size"] = batch_size
         test_results_df = pd.concat([test_results_df, test_results])
         
