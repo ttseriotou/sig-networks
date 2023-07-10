@@ -427,6 +427,15 @@ def obtain_signatures_history(method: str,
                               seed: int = 42,
                               path_indices : list | np.array | None = None,
                               concatenate_current: bool = True) -> torch.tensor:
+    # use nlpsig to construct the path as a numpy array
+    # first define how we construct the path
+    path_specifics = {"pad_by": "history",
+                      "zero_padding": True,
+                      "method": "max",
+                      "time_feature": None,
+                      "embeddings": "dim_reduced",
+                      "include_current_embedding": True}
+    
     # first perform dimension reduction on embeddings
     if dimension == embeddings.shape[1]:
         # no need to perform dimensionality reduction
@@ -436,68 +445,36 @@ def obtain_signatures_history(method: str,
                                      n_components=dimension)
         embeddings_reduced = reduction.fit_transform(embeddings,
                                                      random_state=seed)
-        
+    
+    # obtain path by using PrepareData class and .pad method
     paths = nlpsig.PrepareData(original_df=df,
                                id_column=id_column,
                                label_column=label_column,
                                embeddings=embeddings,
                                embeddings_reduced=embeddings_reduced)
-    # obtain column names of the embeddings in paths.df
-    colnames = paths._obtain_colnames(embeddings="dim_reduced")
-
-    # find how many features the signature will have
-    if log_signature:
-        signature_output_channels = signatory.logsignature_channels(
-            in_channels=dimension, depth=sig_depth
-        )
-    else:
-        signature_output_channels = signatory.signature_channels(
-            channels=dimension, depth=sig_depth
-        )
-        
-    # initialise empty array to store mean history
-    print("Computing the path signature of the history for each item in the dataframe")
-    signature_history = torch.zeros((len(df.index), signature_output_channels)).float()
-    for i in tqdm(range(len(df.index))):
-        # look at particular text at a given index
-        text = paths.df.iloc[i]
-        id = text[id_column]
-        timeline_index = text["timeline_index"]
-
-        # obtain history of the particular text
-        history = paths.df[
-            (paths.df[id_column] == id) & (paths.df["timeline_index"] <= timeline_index)
-        ][colnames]
-        
-        # obtain history path as torch tensor
-        history_path = torch.tensor(history.values)
-        
-        # if there's only one post in the history (i.e. itself), we need to pad this
-        # because a path must have at least two points
-        if history_path.shape[0] == 1:
-            history_path = torch.cat([history_path, torch.zeros(history_path.shape)])
-        
-        if log_signature:
-            signature_history[i] = signatory.logsignature(torch.stack([history_path]),
-                                                          sig_depth).float()
-        else:
-            signature_history[i] = signatory.signature(torch.stack([history_path]),
-                                                       sig_depth).float()
-        
+    path = paths.pad(**path_specifics)
+    
     # slice the path in specified way
     if path_indices is not None:
-        signature_history = signature_history[path_indices]
+        path = path[path_indices]
         embeddings = embeddings[path_indices]
+
+    # remove last two columns (which contains the id and the label)
+    path = path[:,:,:-2].astype("float")
+    
+    # convert to torch tensor to compute signature using signatory
+    path = torch.from_numpy(path).float()
+    if log_signature:
+        sig = signatory.signature(path, sig_depth).float()
+    else:
+        sig = signatory.logsignature(path, sig_depth).float()
     
     # concatenate with current embedding
     if concatenate_current:
-        signature_history = torch.cat([signature_history,
-                                       torch.from_numpy(embeddings)],
-                                      dim=1).float()
-    else:
-        signature_history = signature_history.float()
+        sig = torch.cat([sig, torch.from_numpy(embeddings)],
+                        dim=1)
 
-    return signature_history
+    return sig
 
 
 def histories_baseline_hyperparameter_search(
