@@ -306,7 +306,7 @@ def swnu_network_hyperparameter_search(
                                             results["learning_rate"] = lr
                                             results["seed"] = seed
                                             results["BiLSTM"] = BiLSTM
-                                            results["loss"] = loss
+                                            results["loss_function"] = loss
                                             results["gamma"] = gamma
                                             results["k_fold"] = k_fold
                                             results["n_splits"] = n_splits if k_fold else None
@@ -431,7 +431,7 @@ def swnu_network_hyperparameter_search(
         test_results["learning_rate"] = checkpoint["extra_info"]["learning_rate"]
         test_results["seed"] = seed
         test_results["BiLSTM"] = checkpoint["extra_info"]["BiLSTM"]
-        test_results["loss"] = loss
+        test_results["loss_function"] = loss
         test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
         test_results["n_splits"] = n_splits if k_fold else None
