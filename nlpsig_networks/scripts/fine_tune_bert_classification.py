@@ -17,6 +17,7 @@ from transformers import (
     PreTrainedModel,
     PreTrainedTokenizer,
 )
+from typing import Iterable
 
 
 def testing_transformer(
@@ -45,9 +46,21 @@ def testing_transformer(
     
     # compute accuracy
     accuracy = ((predicted == labels).sum() / len(labels)).item()
-    # compute F1
-    f1_scores = metrics.f1_score(labels, predicted, average=None)
+    
+    # compute F1 scores
+    f1_scores = metrics.f1_score(labels, predicted, average=None, zero_division=0.0)
+    # compute macro F1 score
     f1 = sum(f1_scores)/len(f1_scores)
+    
+    # compute precision scores
+    precision_scores = metrics.precision_score(labels, predicted, average=None, zero_division=0.0)
+    # compute macro precision score
+    precision = sum(precision_scores)/len(precision_scores)
+    
+    # compute recall scores
+    recall_scores = metrics.recall_score(labels, predicted, average=None, zero_division=0.0)
+    # compute macro recall score
+    recall = sum(recall_scores)/len(recall_scores)
     
     # print evaluation metrics
     print(
@@ -56,12 +69,18 @@ def testing_transformer(
     )
     print(f"- f1: {f1_scores}")
     print(f"- f1 (macro): {f1}")
+    print(f"- precision (macro): {precision}")
+    print(f"- recall (macro): {recall}")
         
     return {"predicted": predicted,
             "labels": labels,
             "accuracy": accuracy,
             "f1": f1,
-            "f1_scores": f1_scores}
+            "f1_scores": f1_scores,
+            "precision": precision,
+            "precision_scores": precision_scores,
+            "recall": recall,
+            "recall_scores": recall_scores}
 
 
 def _fine_tune_transformer_for_indices(
@@ -72,6 +91,7 @@ def _fine_tune_transformer_for_indices(
     label_column: str,
     indices: tuple[list[int], list[int], list[int]],
     seed: int,
+    batch_size: int = 64,
     save_model: bool = False,
     output_dir: str | None = None
 ) -> dict[str, float | list[float]]:
@@ -123,10 +143,10 @@ def _fine_tune_transformer_for_indices(
     # set up training arguments
     text_encoder.set_up_training_args(output_dir=output_dir,
                                       num_train_epochs=num_epochs,
-                                      per_device_train_batch_size=128,
+                                      per_device_train_batch_size=batch_size,
                                       disable_tqdm=False,
-                                      save_strategy="steps",
-                                      save_steps=10000,
+                                      save_strategy="epoch",
+                                      load_best_model_at_end=True,
                                       seed=seed)
     
     # set up trainer
@@ -199,9 +219,15 @@ def fine_tune_transformer_for_classification(
                       shuffle=True,
                       random_state=data_split_seed)
         
+        # create lists to record the test metrics for each fold
         accuracy = []
         f1 = []
         f1_scores = []
+        precision = []
+        precision_scores = []
+        recall = []
+        recall_scores = []
+        
         labels = torch.empty((0))
         predicted = torch.empty((0))
         for k in range(n_splits):
@@ -225,19 +251,38 @@ def fine_tune_transformer_for_classification(
             accuracy.append(results_for_fold["accuracy"])
             f1.append(results_for_fold["f1"])
             f1_scores.append(results_for_fold["f1_scores"])
+            precision.append(results_for_fold["precision"])
+            precision_scores.append(results_for_fold["precision_scores"])
+            recall.append(results_for_fold["recall"])
+            recall_scores.append(results_for_fold["recall_scores"])
             
-        if return_metric_for_each_fold:
-            # return how well the model performed on each individual fold
-            return pd.DataFrame({"accuracy": accuracy,
-                                 "f1": f1,
-                                 "f1_scores": f1_scores})
-        else:
+        if not return_metric_for_each_fold:
             # compute how well the model performed on the test sets together
             # compute accuracy
             accuracy = ((predicted == labels).sum() / len(labels)).item()
-            # compute F1
-            f1_scores = metrics.f1_score(labels, predicted, average=None)
+            
+            # compute F1 scores
+            f1_scores = metrics.f1_score(labels, predicted, average=None, zero_division=0.0)
+            # compute macro F1 score
             f1 = sum(f1_scores)/len(f1_scores)
+            
+            # compute precision scores
+            precision_scores = metrics.precision_score(labels, predicted, average=None, zero_division=0.0)
+            # compute macro precision score
+            precision = sum(precision_scores)/len(precision_scores)
+            
+            # compute recall scores
+            recall_scores = metrics.recall_score(labels, predicted, average=None, zero_division=0.0)
+            # compute macro recall score
+            recall = sum(recall_scores)/len(recall_scores)
+            
+        return pd.DataFrame({"accuracy": accuracy,
+                             "f1": f1,
+                             "f1_scores": f1_scores,
+                             "precision": precision,
+                             "precision_scores": precision_scores,
+                             "recall": recall,
+                             "recall_scores": recall_scores})
     else:
         # split dataset
         # x_data is just a dummy torch tensor of size (len(y_data)) to get the fold indices
@@ -264,7 +309,11 @@ def fine_tune_transformer_for_classification(
         
         return pd.DataFrame({"accuracy": results["accuracy"],
                              "f1": results["f1"],
-                             "f1_scores": [results["f1_scores"]]})
+                             "f1_scores": [results["f1_scores"]],
+                             "precision": results["precision"],
+                             "precision_scores": [results["precision_scores"]],
+                             "recall": results["recall"],
+                             "recall_scores": [results["recall_scores"]]})
         
 
 def fine_tune_transformer_average_seed(
@@ -275,6 +324,8 @@ def fine_tune_transformer_average_seed(
     label_column: str,
     seeds: list[int],
     data_split_seed: int = 0,
+    split_ids: torch.Tensor | None = None,
+    split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,
     k_fold: bool = False,
     n_splits: int = 5,
     validation_metric: str = "f1",
@@ -302,6 +353,8 @@ def fine_tune_transformer_average_seed(
             data_split_seed=data_split_seed,
             k_fold=k_fold,
             n_splits=n_splits,
+            split_ids=split_ids,
+            split_indices=split_indices,
             return_metric_for_each_fold=return_metric_for_each_fold
         )
         

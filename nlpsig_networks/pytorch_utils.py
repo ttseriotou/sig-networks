@@ -568,8 +568,8 @@ def testing_pytorch(
         print(f"Average loss: {avg_loss}")
         print(f"- f1: {f1_scores}")
         print(f"- f1 (macro): {f1}")
-        print(f"- precision: {precision}")
-        print(f"- recall: {recall}")
+        print(f"- precision (macro): {precision}")
+        print(f"- recall (macro): {recall}")
     
     return {"predicted": predicted,
             "labels": labels,
