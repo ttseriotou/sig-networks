@@ -465,9 +465,9 @@ def obtain_signatures_history(method: str,
     # convert to torch tensor to compute signature using signatory
     path = torch.from_numpy(path).float()
     if log_signature:
-        sig = signatory.signature(path, sig_depth).float()
-    else:
         sig = signatory.logsignature(path, sig_depth).float()
+    else:
+        sig = signatory.signature(path, sig_depth).float()
     
     # concatenate with current embedding
     if concatenate_current:

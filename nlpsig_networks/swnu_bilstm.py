@@ -16,11 +16,11 @@ class SeqSigNet(nn.Module):
         input_channels: int, 
         output_channels: int,
         num_time_features: int, 
+        embedding_dim: int, 
         log_signature: bool,
         sig_depth: int, 
         hidden_dim_swnu: list[int] | int,
         hidden_dim_lstm: int,
-        embedding_dim: int, 
         hidden_dim_ffn: list[int] | int,
         output_dim: int, 
         dropout_rate: float, 
@@ -42,6 +42,8 @@ class SeqSigNet(nn.Module):
             Requested dimension of the embeddings after convolution layer.
         num_time_features : int
             Number of time features to add to FFN input. If none, set to zero.
+        embedding_dim: int
+            Dimensions of current BERT post embedding. Usually 384 or 768.
         log_signature : bool
             Whether or not to use the log signature or standard signature.
         sig_depth : int
@@ -49,28 +51,27 @@ class SeqSigNet(nn.Module):
         hidden_dim_swnu : list[int] | int
             Dimensions of the hidden layers in the SNWU blocks.
         hidden_dim_lstm : int
-            Dimensions of the hidden layers in the final BiLSTM of SWNU units.
-        embedding_dim: int
-            Dimensions of current BERT post embedding. Usually 384 or 768.
-        hidden_dim_ffn: int
+            Dimensions of the hidden layers in the final BiLSTM applied to the output
+            of the SWNU units.
+        hidden_dim_ffn : list[int] | int
             Dimension of the hidden layers in the FFN.
         output_dim : int
             Dimension of the output layer in the FFN.
         dropout_rate : float
-            Dropout rate in the FFN.      
+            Dropout rate in the FFN.
         augmentation_type : str, optional
             Method of augmenting the path, by default "Conv1d".
             Options are:
             - "Conv1d": passes path through 1D convolution layer.
             - "signatory": passes path through `Augment` layer from `signatory` package.
-        hidden_dim_aug: list[int] | int | None = ()
+        hidden_dim_aug : list[int] | int | None
             Dimensions of the hidden layers in the augmentation layer.
             Passed into `Augment` class from `signatory` package if
-            `augmentation_type!='Conv1d'`, by default ().
+            `augmentation_type='signatory'`, by default None.
         BiLSTM : bool, optional
-            Whether or not a birectional LSTM is used in the SWNU units,
+            Whether or not a birectional LSTM is used in the SWNUs,
             by default False (unidirectional LSTM is used in this case).
-        comb_method : str ='concatenation'
+        comb_method : str, optional
             Determines how to combine the path signature and embeddings,
             by default "gated_addition".
             Options are:
@@ -82,9 +83,10 @@ class SeqSigNet(nn.Module):
 
         super(SeqSigNet, self).__init__()
         
-        self.embedding_dim = embedding_dim #384
-        self.num_time_features = num_time_features
         self.input_channels = input_channels
+        
+        self.embedding_dim = embedding_dim
+        self.num_time_features = num_time_features
         
         if comb_method not in ["concatenation", "gated_addition", "gated_concatenation", "scaled_concatenation"]:
             raise ValueError(
