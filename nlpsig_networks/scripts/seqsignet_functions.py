@@ -215,6 +215,13 @@ def seqsignet_hyperparameter_search(
 
     if isinstance(time_feature, str):
         time_feature = [time_feature]
+    elif time_feature is None:
+        time_feature = []
+        
+    if isinstance(standardise_method, str):
+        standardise_method = [standardise_method]
+    elif standardise_method is None:
+        standardise_method = []
     
     # find model parameters that has the best validation
     results_df = pd.DataFrame()
@@ -307,8 +314,8 @@ def seqsignet_hyperparameter_search(
                                             results["method"] = method
                                             results["input_channels"] = input_channels
                                             results["output_channels"] = output_channels
-                                            results["time_feature"] = time_feature
-                                            results["standardise_method"] = standardise_method
+                                            results["time_feature"] = [time_feature]
+                                            results["standardise_method"] = [standardise_method]
                                             results["add_time_in_path"] = add_time_in_path
                                             results["num_time_features"] = len(time_feature)
                                             results["embedding_dim"] = embedding_dim
@@ -436,6 +443,9 @@ def seqsignet_hyperparameter_search(
         test_results["method"] = checkpoint["extra_info"]["method"]
         test_results["input_channels"] = checkpoint["extra_info"]["input_channels"]
         test_results["output_channels"] = checkpoint["extra_info"]["output_channels"]
+        test_results["time_feature"] = [time_feature]
+        test_results["standardise_method"] = [standardise_method]
+        test_results["add_time_in_path"] = add_time_in_path
         test_results["num_time_features"] = len(time_feature)
         test_results["embedding_dim"] = embedding_dim
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
