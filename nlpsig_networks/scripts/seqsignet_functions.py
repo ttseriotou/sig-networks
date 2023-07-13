@@ -344,9 +344,10 @@ def seqsignet_hyperparameter_search(
                                         model_id += 1
                                         scores_mean = sum(scores)/len(scores)
                                         
-                                        print(f"- average{' (kfold)' if k_fold else ''} "
+                                        if verbose:
+                                            print(f"- average{' (kfold)' if k_fold else ''} "
                                                 f"(validation) metric score: {scores_mean}")
-                                        print(f"scores for the different seeds: {scores}")
+                                            print(f"scores for the different seeds: {scores}")
                                         # save best model according to averaged metric over the different seeds
                                         save_best_model(current_valid_metric=scores_mean,
                                                         extra_info={
