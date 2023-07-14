@@ -121,7 +121,7 @@ class SeqSigNet(nn.Module):
                                  hidden_size=hidden_dim_lstm,
                                  num_layers=1,
                                  batch_first=True,
-                                 bidirectional=True).double()
+                                 bidirectional=True)
 
         # combination method
         if comb_method=='concatenation':
