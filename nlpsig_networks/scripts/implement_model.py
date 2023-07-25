@@ -136,10 +136,18 @@ def implement_model(
                                 "accuracy": test_results["accuracy"], 
                                 "f1": test_results["f1"],
                                 "f1_scores": [test_results["f1_scores"]],
+                                "precision": test_results["precision"],
+                                "precision_scores": [test_results["precision_scores"]],
+                                "recall": test_results["recall"],
+                                "recall_scores": [test_results["recall_scores"]],
                                 "valid_loss": valid_results["loss"],
                                 "valid_accuracy": valid_results["accuracy"], 
                                 "valid_f1": valid_results["f1"],
-                                "valid_f1_scores": [valid_results["f1_scores"]]})
+                                "valid_f1_scores": [valid_results["f1_scores"]],
+                                "valid_precision": valid_results["precision"],
+                                "valid_precision_scores": [valid_results["precision_scores"]],
+                                "valid_recall": valid_results["recall"],
+                                "valid_recall_scores": [valid_results["recall_scores"]]})
 
     if verbose_results:
         with pd.option_context('display.precision', 3):

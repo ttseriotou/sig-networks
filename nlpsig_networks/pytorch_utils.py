@@ -291,23 +291,44 @@ def validation_pytorch(
             # save predictions and labels
             labels = torch.cat([labels, labels_v])
             predicted = torch.cat([predicted, predicted_v])
-        # compute accuracy and f1 score
+        
+        # compute accuracy
         accuracy = ((predicted == labels).sum() / len(labels)).item()
-        f1_scores = metrics.f1_score(labels, predicted, average=None)
-        f1_v = sum(f1_scores)/len(f1_scores)
+        
+        # compute F1 scores
+        f1_scores = metrics.f1_score(labels, predicted, average=None, zero_division=0.0)
+        # compute macro F1 score
+        f1 = sum(f1_scores)/len(f1_scores)
+        
+        # compute precision scores
+        precision_scores = metrics.precision_score(labels, predicted, average=None, zero_division=0.0)
+        # compute macro precision score
+        precision = sum(precision_scores)/len(precision_scores)
+        
+        # compute recall scores
+        recall_scores = metrics.recall_score(labels, predicted, average=None, zero_division=0.0)
+        # compute macro recall score
+        recall = sum(recall_scores)/len(recall_scores)
+        
         if verbose:
             if epoch % verbose_epoch == 0:
                 print(
                     f"[Validation] || Epoch: {epoch+1} || "
-                    + f"Loss: {total_loss / len(valid_loader)} || "
-                    + f"Accuracy: {accuracy} || "
-                    + f"F1-score: {f1_v}"
+                    f"Loss: {total_loss / len(valid_loader)} || "
+                    f"Accuracy: {accuracy} || "
+                    f"F1-score: {f1} || "
+                    f"Precision: {precision} ||"
+                    f"Recall: {recall}"
                 )
 
         return {"loss": total_loss / len(valid_loader),
                 "accuracy": accuracy,
-                "f1": f1_v,
-                "f1_scores": f1_scores}
+                "f1": f1,
+                "f1_scores": f1_scores,
+                "precision": precision,
+                "precision_scores": precision_scores,
+                "recall": recall,
+                "recall_scores": recall_scores}
 
 
 def training_pytorch(
@@ -523,9 +544,21 @@ def testing_pytorch(
     avg_loss = total_loss / len(test_loader)
     # compute accuracy
     accuracy = ((predicted == labels).sum() / len(labels)).item()
-    # compute F1
-    f1_scores = metrics.f1_score(labels, predicted, average=None)
+    
+    # compute F1 scores
+    f1_scores = metrics.f1_score(labels, predicted, average=None, zero_division=0.0)
+    # compute macro F1 score
     f1 = sum(f1_scores)/len(f1_scores)
+    
+    # compute precision scores
+    precision_scores = metrics.precision_score(labels, predicted, average=None, zero_division=0.0)
+    # compute macro precision score
+    precision = sum(precision_scores)/len(precision_scores)
+    
+    # compute recall scores
+    recall_scores = metrics.recall_score(labels, predicted, average=None, zero_division=0.0)
+    # compute macro recall score
+    recall = sum(recall_scores)/len(recall_scores)
     
     if verbose:
         print(
@@ -535,13 +568,19 @@ def testing_pytorch(
         print(f"Average loss: {avg_loss}")
         print(f"- f1: {f1_scores}")
         print(f"- f1 (macro): {f1}")
+        print(f"- precision (macro): {precision}")
+        print(f"- recall (macro): {recall}")
     
     return {"predicted": predicted,
             "labels": labels,
             "loss": avg_loss,
             "accuracy": accuracy,
             "f1": f1,
-            "f1_scores": f1_scores}
+            "f1_scores": f1_scores,
+            "precision": precision,
+            "precision_scores": precision_scores,
+            "recall": recall,
+            "recall_scores": recall_scores}
 
 
 def KFold_pytorch(
@@ -614,18 +653,34 @@ def KFold_pytorch(
         f=initial_starting_state_file,
     )
     
+    # create lists to record the test metrics for each fold
     loss = []
     accuracy = []
     f1 = []
     f1_scores = []
+    precision = []
+    precision_scores = []
+    recall = []
+    recall_scores = []
+    
+    # create lists to record the metrics evaluated on the 
+    # validation sets for each fold
     valid_loss = []
     valid_accuracy = []
     valid_f1 = []
     valid_f1_scores = []
+    valid_precision = []
+    valid_precision_scores = []
+    valid_recall = []
+    valid_recall_scores = []
+    
+    # create empty torch tensors to record the predicted and labels
     labels = torch.empty((0))
     predicted = torch.empty((0))
     valid_labels = torch.empty((0))
     valid_predicted = torch.empty((0))
+    
+    # loop through folds to fit and evaluate
     fold_list = tqdm(range(folds.n_splits)) if verbose else range(folds.n_splits)
     for fold in fold_list:
         if verbose:
@@ -681,6 +736,10 @@ def KFold_pytorch(
         accuracy.append(test_results["accuracy"])
         f1.append(test_results["f1"])
         f1_scores.append(test_results["f1_scores"])
+        precision.append(test_results["precision"])
+        precision_scores.append(test_results["precision_scores"])
+        recall.append(test_results["recall"])
+        recall_scores.append(test_results["recall_scores"])
         
         if valid is not None:
             # test and evaluate on the validation set
@@ -698,11 +757,19 @@ def KFold_pytorch(
             valid_accuracy.append(valid_results["accuracy"])
             valid_f1.append(valid_results["f1"])
             valid_f1_scores.append(valid_results["f1_scores"])
+            valid_precision.append(test_results["precision"])
+            valid_precision_scores.append(test_results["precision_scores"])
+            valid_recall.append(test_results["recall"])
+            valid_recall_scores.append(test_results["recall_scores"])
         else:
             valid_loss.append(None)
             valid_accuracy.append(None)
             valid_f1.append(None)
             valid_f1_scores.append(None)
+            valid_precision.append(None)
+            valid_precision_scores.append(None)
+            valid_recall.append(None)
+            valid_recall_scores.append(None)
 
     # remove starting state pickle file
     os.remove(initial_starting_state_file)
@@ -713,35 +780,76 @@ def KFold_pytorch(
                              "accuracy": accuracy, 
                              "f1": f1,
                              "f1_scores": f1_scores,
+                             "precision": precision,
+                             "precision_scores": precision_scores,
+                             "recall": recall,
+                             "recall_scores": recall_scores,
                              "valid_loss": valid_loss,
                              "valid_accuracy": valid_accuracy, 
                              "valid_f1": valid_f1,
-                             "valid_f1_scores": valid_f1_scores})
+                             "valid_f1_scores": valid_f1_scores,
+                             "valid_precision": valid_precision,
+                             "valid_precision_scores": valid_precision_scores,
+                             "valid_recall": valid_recall,
+                             "valid_recall_scores": valid_recall_scores})
     else:
         # compute how well the model performed on the test sets together
         # compute accuracy
         accuracy = ((predicted == labels).sum() / len(labels)).item()
         # compute F1
-        f1_scores = metrics.f1_score(labels, predicted, average=None)
+        f1_scores = metrics.f1_score(labels, predicted, average=None, zero_division=0.0)
         f1 = sum(f1_scores)/len(f1_scores)
+        
+        # compute precision scores
+        precision_scores = metrics.precision_score(labels, predicted, average=None, zero_division=0.0)
+        # compute macro precision score
+        precision = sum(precision_scores)/len(precision_scores)
+        
+        # compute recall scores
+        recall_scores = metrics.recall_score(labels, predicted, average=None, zero_division=0.0)
+        # compute macro recall score
+        recall = sum(recall_scores)/len(recall_scores)
         
         if valid is not None:
             # compute how well the model performed on the
             # validation sets in the folds
-            valid_accuracy = ((predicted == labels).sum() / len(labels)).item()
+            valid_accuracy = ((valid_predicted == valid_labels).sum() / len(valid_labels)).item()
+            
             # compute F1
-            valid_f1_scores = metrics.f1_score(labels, predicted, average=None)
-            valid_f1 = sum(f1_scores)/len(f1_scores)
+            valid_f1_scores = metrics.f1_score(valid_labels, valid_predicted, average=None, zero_division=0.0)
+            valid_f1 = sum(valid_f1_scores)/len(valid_f1_scores)
+            
+            # compute precision scores
+            valid_precision_scores = metrics.precision_score(valid_labels, valid_predicted, average=None, zero_division=0.0)
+            # compute macro precision score
+            valid_precision = sum(valid_precision_scores)/len(valid_precision_scores)
+            
+            # compute recall scores
+            valid_recall_scores = metrics.recall_score(valid_labels, valid_predicted, average=None, zero_division=0.0)
+            # compute macro recall score
+            valid_recall = sum(valid_recall_scores)/len(valid_recall_scores)
         else:
             valid_accuracy = None
-            valid_f1_scores = None
             valid_f1 = None
+            valid_f1_scores = None
+            valid_precision = None
+            valid_precision_scores = None
+            valid_recall = None
+            valid_recall_scores = None
         
         return pd.DataFrame({"loss": None,
                              "accuracy": accuracy, 
                              "f1": f1,
                              "f1_scores": [f1_scores],
+                             "precision": precision,
+                             "precision_scores": [precision_scores],
+                             "recall": recall,
+                             "recall_scores": [recall_scores],
                              "valid_loss": None,
                              "valid_accuracy": valid_accuracy, 
                              "valid_f1": valid_f1,
-                             "valid_f1_scores": [valid_f1_scores]})
+                             "valid_f1_scores": [valid_f1_scores],
+                             "valid_precision": valid_precision,
+                             "valid_precision_scores": [valid_precision_scores],
+                             "valid_recall": valid_recall,
+                             "valid_recall_scores": [valid_recall_scores]})
