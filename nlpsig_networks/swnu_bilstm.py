@@ -14,7 +14,6 @@ class SeqSigNet(nn.Module):
     def __init__(
         self, 
         input_channels: int, 
-        output_channels: int,
         num_time_features: int, 
         embedding_dim: int, 
         log_signature: bool,
@@ -24,6 +23,7 @@ class SeqSigNet(nn.Module):
         hidden_dim_ffn: list[int] | int,
         output_dim: int, 
         dropout_rate: float, 
+        output_channels: int | None = None,
         augmentation_type: str = 'Conv1d', 
         hidden_dim_aug: list[int] | int | None = None,
         BiLSTM: bool = False,
@@ -38,8 +38,6 @@ class SeqSigNet(nn.Module):
         ----------
         input_channels : int
             Dimension of the (dimensonally reduced) history embeddings that will be passed in. 
-        output_channels : int
-            Requested dimension of the embeddings after convolution layer.
         num_time_features : int
             Number of time features to add to FFN input. If none, set to zero.
         embedding_dim: int
@@ -59,6 +57,9 @@ class SeqSigNet(nn.Module):
             Dimension of the output layer in the FFN.
         dropout_rate : float
             Dropout rate in the FFN.
+        output_channels : int | None, optional
+            Requested dimension of the embeddings after convolution layer.
+            If None, will be set to the last item in `hidden_dim`, by default None.
         augmentation_type : str, optional
             Method of augmenting the path, by default "Conv1d".
             Options are:
