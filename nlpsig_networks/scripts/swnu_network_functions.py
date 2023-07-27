@@ -79,7 +79,7 @@ def implement_swnu_network(
     embedding_dim: int,
     log_signature: bool,
     sig_depth: int,
-    lstm_hidden_dim: list[int] | int,
+    swnu_hidden_dim: list[int] | int,
     ffn_hidden_dim: list[int] | int,
     output_dim: int,
     BiLSTM: bool,
@@ -113,7 +113,7 @@ def implement_swnu_network(
         "embedding_dim": embedding_dim,
         "log_signature": log_signature,
         "sig_depth": sig_depth,
-        "hidden_dim_swnu": lstm_hidden_dim,
+        "hidden_dim_swnu": swnu_hidden_dim,
         "hidden_dim_ffn": ffn_hidden_dim,
         "output_dim": output_dim,
         "dropout_rate": dropout_rate,
@@ -165,15 +165,14 @@ def swnu_network_hyperparameter_search(
     history_lengths: list[int],
     dim_reduce_methods: list[str],
     dimensions: list[int],
-    sig_depths: list[int],
     log_signature: bool,
     conv_output_channels: list[int],
-    swnu_hidden_dim_sizes: list[int] | list[list[int]],
+    swnu_hidden_dim_sizes_and_sig_depths: list[tuple[int, list[int] | list[list[int]]]],
     ffn_hidden_dim_sizes: list[int] | list[list[int]],
     dropout_rates: list[float],
     learning_rates: list[float],
     BiLSTM: bool,
-    seeds : list[int],
+    seeds: list[int],
     loss: str,
     gamma: float = 0.0,
     batch_size: int = 64,
@@ -205,6 +204,13 @@ def swnu_network_hyperparameter_search(
 
     if isinstance(time_feature, str):
         time_feature = [time_feature]
+    elif time_feature is None:
+        time_feature = []
+        
+    if isinstance(standardise_method, str):
+        standardise_method = [standardise_method]
+    elif standardise_method is None:
+        standardise_method = []
     
     # find model parameters that has the best validation
     results_df = pd.DataFrame()
@@ -228,128 +234,129 @@ def swnu_network_hyperparameter_search(
                     k=k,
                     time_feature=time_feature,
                     standardise_method=standardise_method,
-                    add_time_in_path= add_time_in_path,
+                    add_time_in_path=add_time_in_path,
                     path_indices=path_indices
                 )
-        
-                for lstm_hidden_dim in tqdm(swnu_hidden_dim_sizes):
-                    for ffn_hidden_dim in tqdm(ffn_hidden_dim_sizes):
-                        for sig_depth in tqdm(sig_depths):
-                            for output_channels in tqdm(conv_output_channels):
-                                for dropout in tqdm(dropout_rates):
-                                    for lr in tqdm(learning_rates):
-                                        if verbose:
-                                            print("\n" + "!" * 50)
-                                            print(f"lstm_hidden_dim: {lstm_hidden_dim} | "
-                                                  f"ffn_hidden_dim: {ffn_hidden_dim} | "
-                                                  f"sig_depth: {sig_depth} | "
-                                                  f"output_channels: {output_channels} | "
-                                                  f"dropout: {dropout} | "
-                                                  f"learning_rate: {lr}")
-                                        scores = []
-                                        verbose_model = verbose
-                                        for seed in seeds:
-                                            _, results = implement_swnu_network(
-                                                num_epochs=num_epochs,
-                                                x_data=x_data,
-                                                y_data=y_data,
-                                                input_channels=input_channels,
-                                                output_channels=output_channels,
-                                                num_time_features=len(time_feature),
-                                                embedding_dim=embedding_dim,
-                                                log_signature=log_signature,
-                                                sig_depth=sig_depth,
-                                                lstm_hidden_dim=lstm_hidden_dim,
-                                                ffn_hidden_dim=ffn_hidden_dim,
-                                                output_dim=output_dim,
-                                                BiLSTM=BiLSTM,
-                                                dropout_rate=dropout,
-                                                learning_rate=lr,
-                                                seed=seed,
-                                                loss=loss,
-                                                gamma=gamma,
-                                                batch_size=batch_size,
-                                                augmentation_type=augmentation_type,
-                                                hidden_dim_aug=hidden_dim_aug,
-                                                comb_method=comb_method,
-                                                data_split_seed=data_split_seed,
-                                                split_ids=split_ids,
-                                                split_indices=split_indices,
-                                                k_fold=k_fold,
-                                                n_splits=n_splits,
-                                                patience=patience,
-                                                verbose_training=False,
-                                                verbose_results=verbose,
-                                                verbose_model=verbose_model
-                                            )
-                                            # save metric that we want to validate on
-                                            # taking the mean over the performance on the folds for the seed
-                                            # if k_fold=False, .mean() just returns the performance for the seed
-                                            scores.append(results[f"valid_{validation_metric}"].mean())
-                                            
-                                            # concatenate to results dataframe
-                                            results["k"] = k
-                                            results["dimensions"] = dimension
-                                            results["sig_depth"] = sig_depth
-                                            results["method"] = method
-                                            results["input_channels"] = input_channels
-                                            results["output_channels"] = output_channels
-                                            results["time_feature"] = time_feature
-                                            results["standardise_method"] = standardise_method
-                                            results["add_time_in_path"] = add_time_in_path
-                                            results["num_time_features"] = len(time_feature)
-                                            results["embedding_dim"] = embedding_dim
-                                            results["log_signature"] = log_signature
-                                            results["lstm_hidden_dim"] = [tuple([lstm_hidden_dim]) for _ in range(len(results.index))] if (type(lstm_hidden_dim)==int) else [tuple(lstm_hidden_dim) for _ in range(len(results.index))]
-                                            results["ffn_hidden_dim"] = [tuple([ffn_hidden_dim]) for _ in range(len(results.index))] if (type(ffn_hidden_dim)==int) else [tuple(lstm_hidden_dim) for _ in range(len(results.index))]
-                                            results["dropout_rate"] = dropout
-                                            results["learning_rate"] = lr
-                                            results["seed"] = seed
-                                            results["BiLSTM"] = BiLSTM
-                                            results["loss"] = loss
-                                            results["gamma"] = gamma
-                                            results["k_fold"] = k_fold
-                                            results["n_splits"] = n_splits if k_fold else None
-                                            results["augmentation_type"] = augmentation_type
-                                            results["hidden_dim_aug"] = None if hidden_dim_aug is None else [tuple([hidden_dim_aug]) for _ in range(len(results.index))] if (type(hidden_dim_aug)==int) else [tuple(hidden_dim_aug) for _ in range(len(results.index))]
-                                            results["comb_method"] = comb_method
-                                            results["batch_size"] = batch_size
-                                            results["model_id"] = model_id
-                                            results_df = pd.concat([results_df, results])
-                                            
-                                            # don't continue printing out the model
-                                            verbose_model = False
 
-                                        model_id += 1
-                                        scores_mean = sum(scores)/len(scores)
+                for swnu_hidden_dim, sig_depth in tqdm(swnu_hidden_dim_sizes_and_sig_depths):
+                    for ffn_hidden_dim in tqdm(ffn_hidden_dim_sizes):
+                        for output_channels in tqdm(conv_output_channels):
+                            for dropout in tqdm(dropout_rates):
+                                for lr in tqdm(learning_rates):
+                                    if verbose:
+                                        print("\n" + "!" * 50)
+                                        print(f"swnu_hidden_dim: {swnu_hidden_dim} | "
+                                                f"ffn_hidden_dim: {ffn_hidden_dim} | "
+                                                f"sig_depth: {sig_depth} | "
+                                                f"output_channels: {output_channels} | "
+                                                f"dropout: {dropout} | "
+                                                f"learning_rate: {lr}")
                                         
+                                    scores = []
+                                    verbose_model = verbose
+                                    for seed in seeds:
+                                        _, results = implement_swnu_network(
+                                            num_epochs=num_epochs,
+                                            x_data=x_data,
+                                            y_data=y_data,
+                                            input_channels=input_channels,
+                                            output_channels=output_channels,
+                                            num_time_features=len(time_feature),
+                                            embedding_dim=embedding_dim,
+                                            log_signature=log_signature,
+                                            sig_depth=sig_depth,
+                                            swnu_hidden_dim=swnu_hidden_dim,
+                                            ffn_hidden_dim=ffn_hidden_dim,
+                                            output_dim=output_dim,
+                                            BiLSTM=BiLSTM,
+                                            dropout_rate=dropout,
+                                            learning_rate=lr,
+                                            seed=seed,
+                                            loss=loss,
+                                            gamma=gamma,
+                                            batch_size=batch_size,
+                                            augmentation_type=augmentation_type,
+                                            hidden_dim_aug=hidden_dim_aug,
+                                            comb_method=comb_method,
+                                            data_split_seed=data_split_seed,
+                                            split_ids=split_ids,
+                                            split_indices=split_indices,
+                                            k_fold=k_fold,
+                                            n_splits=n_splits,
+                                            patience=patience,
+                                            verbose_training=False,
+                                            verbose_results=verbose,
+                                            verbose_model=verbose_model
+                                        )
+                                        # save metric that we want to validate on
+                                        # taking the mean over the performance on the folds for the seed
+                                        # if k_fold=False, .mean() just returns the performance for the seed
+                                        scores.append(results[f"valid_{validation_metric}"].mean())
+                                        
+                                        # concatenate to results dataframe
+                                        results["k"] = k
+                                        results["dimensions"] = dimension
+                                        results["sig_depth"] = sig_depth
+                                        results["method"] = method
+                                        results["input_channels"] = input_channels
+                                        results["output_channels"] = output_channels
+                                        results["time_feature"] = [time_feature]
+                                        results["standardise_method"] = [standardise_method]
+                                        results["add_time_in_path"] = add_time_in_path
+                                        results["num_time_features"] = len(time_feature)
+                                        results["embedding_dim"] = embedding_dim
+                                        results["log_signature"] = log_signature
+                                        results["swnu_hidden_dim"] = [tuple(swnu_hidden_dim) for _ in range(len(results.index))]
+                                        results["ffn_hidden_dim"] = [tuple(ffn_hidden_dim) for _ in range(len(results.index))]
+                                        results["dropout_rate"] = dropout
+                                        results["learning_rate"] = lr
+                                        results["seed"] = seed
+                                        results["BiLSTM"] = BiLSTM
+                                        results["loss_function"] = loss
+                                        results["gamma"] = gamma
+                                        results["k_fold"] = k_fold
+                                        results["n_splits"] = n_splits if k_fold else None
+                                        results["augmentation_type"] = augmentation_type
+                                        results["hidden_dim_aug"] = [tuple(hidden_dim_aug) for _ in range(len(results.index))] if hidden_dim_aug is not None else None
+                                        results["comb_method"] = comb_method
+                                        results["batch_size"] = batch_size
+                                        results["model_id"] = model_id
+                                        results_df = pd.concat([results_df, results])
+                                        
+                                        # don't continue printing out the model
+                                        verbose_model = False
+
+                                    model_id += 1
+                                    scores_mean = sum(scores)/len(scores)
+                                    
+                                    if verbose:
                                         print(f"- average{' (kfold)' if k_fold else ''} "
-                                              f"(validation) metric score: {scores_mean}")
+                                            f"(validation) metric score: {scores_mean}")
                                         print(f"scores for the different seeds: {scores}")
-                                        # save best model according to averaged metric over the different seeds
-                                        save_best_model(current_valid_metric=scores_mean,
-                                                        extra_info={
-                                                            "k": k,
-                                                            "dimensions": dimension,
-                                                            "sig_depth": sig_depth,
-                                                            "method": method,
-                                                            "input_channels": input_channels,
-                                                            "output_channels": output_channels,
-                                                            "time_feature": time_feature,
-                                                            "standardise_method": standardise_method,
-                                                            "add_time_in_path": add_time_in_path,
-                                                            "num_time_features": len(time_feature),
-                                                            "embedding_dim": embedding_dim,
-                                                            "log_signature": log_signature,
-                                                            "lstm_hidden_dim": lstm_hidden_dim,
-                                                            "ffn_hidden_dim": ffn_hidden_dim,
-                                                            "dropout_rate": dropout,
-                                                            "learning_rate": lr,
-                                                            "BiLSTM": BiLSTM,
-                                                            "augmentation_type": augmentation_type,
-                                                            "hidden_dim_aug": hidden_dim_aug,
-                                                            "comb_method": comb_method,
-                                                        })
+                                    # save best model according to averaged metric over the different seeds
+                                    save_best_model(current_valid_metric=scores_mean,
+                                                    extra_info={
+                                                        "k": k,
+                                                        "dimensions": dimension,
+                                                        "sig_depth": sig_depth,
+                                                        "method": method,
+                                                        "input_channels": input_channels,
+                                                        "output_channels": output_channels,
+                                                        "time_feature": time_feature,
+                                                        "standardise_method": standardise_method,
+                                                        "add_time_in_path": add_time_in_path,
+                                                        "num_time_features": len(time_feature),
+                                                        "embedding_dim": embedding_dim,
+                                                        "log_signature": log_signature,
+                                                        "swnu_hidden_dim": swnu_hidden_dim,
+                                                        "ffn_hidden_dim": ffn_hidden_dim,
+                                                        "dropout_rate": dropout,
+                                                        "learning_rate": lr,
+                                                        "BiLSTM": BiLSTM,
+                                                        "augmentation_type": augmentation_type,
+                                                        "hidden_dim_aug": hidden_dim_aug,
+                                                        "comb_method": comb_method,
+                                                    })
 
     checkpoint = torch.load(f=model_output)
     if verbose:
@@ -385,7 +392,7 @@ def swnu_network_hyperparameter_search(
             embedding_dim=embedding_dim,
             log_signature=checkpoint["extra_info"]["log_signature"],
             output_dim=output_dim,
-            lstm_hidden_dim=checkpoint["extra_info"]["lstm_hidden_dim"],
+            swnu_hidden_dim=checkpoint["extra_info"]["swnu_hidden_dim"],
             ffn_hidden_dim=checkpoint["extra_info"]["ffn_hidden_dim"],
             BiLSTM=checkpoint["extra_info"]["BiLSTM"],
             dropout_rate=checkpoint["extra_info"]["dropout_rate"],
@@ -420,18 +427,21 @@ def swnu_network_hyperparameter_search(
         test_results["method"] = checkpoint["extra_info"]["method"]
         test_results["input_channels"] = checkpoint["extra_info"]["input_channels"]
         test_results["output_channels"] = checkpoint["extra_info"]["output_channels"]
+        test_results["time_feature"] = [time_feature]
+        test_results["standardise_method"] = [standardise_method]
+        test_results["add_time_in_path"] = add_time_in_path
         test_results["num_time_features"] = len(time_feature)
         test_results["embedding_dim"] = embedding_dim
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
-        test_results["lstm_hidden_dim"] = [tuple([checkpoint["extra_info"]["lstm_hidden_dim"]]) 
-                                          for _ in range(len(test_results.index))] if (type(checkpoint["extra_info"]["lstm_hidden_dim"])==int) else [tuple(checkpoint["extra_info"]["lstm_hidden_dim"]) for _ in range(len(test_results.index))]
-        test_results["ffn_hidden_dim"] = [tuple([checkpoint["extra_info"]["ffn_hidden_dim"]]) 
-                                          for _ in range(len(test_results.index))] if (type(checkpoint["extra_info"]["ffn_hidden_dim"])==int) else [tuple(checkpoint["extra_info"]["ffn_hidden_dim"]) for _ in range(len(test_results.index))]
+        test_results["swnu_hidden_dim"] = [tuple(checkpoint["extra_info"]["swnu_hidden_dim"])
+                                           for _ in range(len(test_results.index))]
+        test_results["ffn_hidden_dim"] = [tuple(checkpoint["extra_info"]["ffn_hidden_dim"])
+                                          for _ in range(len(test_results.index))]
         test_results["dropout_rate"] = checkpoint["extra_info"]["dropout_rate"]
         test_results["learning_rate"] = checkpoint["extra_info"]["learning_rate"]
         test_results["seed"] = seed
         test_results["BiLSTM"] = checkpoint["extra_info"]["BiLSTM"]
-        test_results["loss"] = loss
+        test_results["loss_function"] = loss
         test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
         test_results["n_splits"] = n_splits if k_fold else None

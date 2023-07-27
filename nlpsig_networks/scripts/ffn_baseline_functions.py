@@ -277,7 +277,7 @@ def ffn_hyperparameter_search(
                     results["dropout_rate"] = dropout
                     results["learning_rate"] = lr
                     results["seed"] = seed
-                    results["loss"] = loss
+                    results["loss_function"] = loss
                     results["gamma"] = gamma
                     results["k_fold"] = k_fold
                     results["n_splits"] = n_splits if k_fold else None
@@ -335,7 +335,7 @@ def ffn_hyperparameter_search(
         test_results["dropout_rate"] = checkpoint["extra_info"]["dropout_rate"]
         test_results["learning_rate"] = checkpoint["extra_info"]["learning_rate"]
         test_results["seed"] = seed
-        test_results["loss"] = loss
+        test_results["loss_function"] = loss
         test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
         test_results["n_splits"] = n_splits if k_fold else None
@@ -465,9 +465,9 @@ def obtain_signatures_history(method: str,
     # convert to torch tensor to compute signature using signatory
     path = torch.from_numpy(path).float()
     if log_signature:
-        sig = signatory.signature(path, sig_depth).float()
-    else:
         sig = signatory.logsignature(path, sig_depth).float()
+    else:
+        sig = signatory.signature(path, sig_depth).float()
     
     # concatenate with current embedding
     if concatenate_current:
@@ -687,7 +687,7 @@ def histories_baseline_hyperparameter_search(
         test_results["dropout_rate"] = checkpoint["extra_info"]["dropout_rate"]
         test_results["learning_rate"] = checkpoint["extra_info"]["learning_rate"]
         test_results["seed"] = seed
-        test_results["loss"] = loss
+        test_results["loss_function"] = loss
         test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
         test_results["n_splits"] = n_splits if k_fold else None
