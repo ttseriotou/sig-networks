@@ -18,6 +18,7 @@ torchvision = "0.10.0"
 signatory = "1.2.6.1.9.0"
 scikit-learn = "^1.2.2"
 pandas = "^1.5.3"
+accelerate = "0.20.1"
 transformers = "4.30.2"
 
 [build-system]
