@@ -84,7 +84,6 @@ def implement_seqsignet(
     x_data: torch.tensor | np.array,
     y_data: torch.tensor | np.array,
     input_channels: int,
-    output_channels: int,
     num_time_features: int,
     embedding_dim: int,
     log_signature: bool,
@@ -100,6 +99,7 @@ def implement_seqsignet(
     loss: str,
     gamma: float = 0.0,
     batch_size: int = 64,
+    output_channels: int | None = None,
     augmentation_type: str = "Conv1d",
     hidden_dim_aug: list[int] | int | None = None,
     comb_method: str = "concatenation",
@@ -119,7 +119,6 @@ def implement_seqsignet(
     # initialise SeqSigNet
     SeqSigNet_args = {
         "input_channels": input_channels,
-        "output_channels": output_channels,
         "num_time_features": num_time_features,
         "embedding_dim": embedding_dim,
         "log_signature": log_signature,
@@ -129,6 +128,7 @@ def implement_seqsignet(
         "hidden_dim_ffn": ffn_hidden_dim,
         "output_dim": output_dim,
         "dropout_rate": dropout_rate,
+        "output_channels": output_channels,
         "augmentation_type": augmentation_type,
         "hidden_dim_aug": hidden_dim_aug,
         "BiLSTM": BiLSTM,
@@ -180,7 +180,6 @@ def seqsignet_hyperparameter_search(
     dim_reduce_methods: list[str],
     dimensions: list[int],
     log_signature: bool,
-    conv_output_channels: list[int],
     swnu_hidden_dim_sizes_and_sig_depths: list[tuple[int, list[int] | list[list[int]]]],
     lstm_hidden_dim_sizes: list[int],
     ffn_hidden_dim_sizes: list[int] | list[list[int]],
@@ -194,6 +193,7 @@ def seqsignet_hyperparameter_search(
     time_feature: list[str] | str | None = None,
     standardise_method: list[str] | str | None = None,
     add_time_in_path: bool = False,
+    conv_output_channels: list[int] | None = None,
     augmentation_type: str = "Conv1d",
     hidden_dim_aug: list[int] | int | None = None,
     comb_method: str = "concatenation",
@@ -226,6 +226,9 @@ def seqsignet_hyperparameter_search(
         standardise_method = [standardise_method]
     elif standardise_method is None:
         standardise_method = []
+        
+    if conv_output_channels is None:
+        conv_output_channels = [None]
     
     # find model parameters that has the best validation
     results_df = pd.DataFrame()
