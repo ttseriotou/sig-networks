@@ -211,7 +211,7 @@ def fine_tune_transformer_for_classification(
     set_seed(seed)
     
     # create dummy dataset for passing into Folds and DataSplit
-    datasize = len(df.index) if path_indices is None else len(path_indices)
+    datasize = len(df.index) if path_indices is None else len(df.iloc[path_indices].index)
     dummy_data = torch.ones(datasize)
     
     if k_fold:
