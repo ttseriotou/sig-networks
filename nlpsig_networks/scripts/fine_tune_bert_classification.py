@@ -210,15 +210,15 @@ def fine_tune_transformer_for_classification(
     # set seed
     set_seed(seed)
     
-    # set y_data as the correct column
-    y_data = df[label_column]
+    # create dummy dataset for passing into Folds and DataSplit
+    datasize = len(df.index) if path_indices is not None else len(path_indices)
+    dummy_data = torch.rand((len(datasize)))
     
     if k_fold:
         # perform KFold evaluation and return the performance on validation and test sets
         # split dataset
-        # x_data is just a dummy torch tensor of size (len(y_data)) to get the fold indices
-        folds = Folds(x_data=torch.rand((len(y_data))),
-                      y_data=torch.tensor(y_data),
+        folds = Folds(x_data=dummy_data,
+                      y_data=dummy_data,
                       groups=split_ids,
                       n_splits=n_splits,
                       indices=split_indices,
@@ -292,9 +292,8 @@ def fine_tune_transformer_for_classification(
                              "recall_scores": recall_scores})
     else:
         # split dataset
-        # x_data is just a dummy torch tensor of size (len(y_data)) to get the fold indices
-        split_data = DataSplits(x_data=torch.rand((len(y_data))),
-                                y_data=y_data,
+        split_data = DataSplits(x_data=dummy_data,
+                                y_data=dummy_data,
                                 groups=split_ids,
                                 train_size=0.8,
                                 valid_size=0.2,
