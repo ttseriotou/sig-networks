@@ -3,6 +3,7 @@ from nlpsig import TextEncoder
 import evaluate
 import numpy as np
 import pandas as pd
+from typing import Iterable
 import torch
 from tqdm.auto import tqdm
 from sklearn import metrics
@@ -83,20 +84,21 @@ def testing_transformer(
             "recall_scores": recall_scores}
 
 
-def _fine_tune_transformer_for_indices(
+def _fine_tune_transformer_for_data_split(
     num_epochs: int,
     pretrained_model_name: str,
     df: pd.DataFrame,
     feature_name: str,
     label_column: str,
-    indices: tuple[list[int], list[int], list[int]],
     seed: int,
     batch_size: int = 64,
+    path_indices : list | np.array | None = None,
+    split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,
     save_model: bool = False,
     output_dir: str | None = None
 ) -> dict[str, float | list[float]]:
     """
-    Function to fine-tune and evalaute a model for a given data_split (via indices)
+    Function to fine-tune and evalaute a model for a given data_split (via split_indices)
     """
     
     # set seed
@@ -107,6 +109,9 @@ def _fine_tune_transformer_for_indices(
     if not isinstance(output_dir, str):
         raise TypeError("output_dir must be either a string or None")
     
+    if path_indices is not None:
+        df = df.iloc[path_indices]
+
     # obtain y_data and create dictionary for converting label_to_id and id_to_label
     y_data = df[label_column]
     label_to_id = {y_data.unique()[i]: i for i in range(len(y_data.unique()))}
@@ -138,7 +143,7 @@ def _fine_tune_transformer_for_indices(
     text_encoder.tokenize_text()
     
     # split the dataset using the indices which are passed in
-    text_encoder.split_dataset(indices=indices)
+    text_encoder.split_dataset(indices=split_indices)
     
     # set up training arguments
     text_encoder.set_up_training_args(output_dir=output_dir,
@@ -189,9 +194,10 @@ def fine_tune_transformer_for_classification(
     feature_name: str,
     label_column: str,
     seed: int,
+    path_indices : list | np.array | None = None,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
-    split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,
+    split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | tuple[tuple[Iterable[int], Iterable[int], Iterable[int]]] | None = None,
     k_fold: bool = False,
     n_splits: int = 5,
     return_metric_for_each_fold: bool = False,
@@ -232,13 +238,14 @@ def fine_tune_transformer_for_classification(
         predicted = torch.empty((0))
         for k in range(n_splits):
             # compute how well the model performs on this fold
-            results_for_fold = _fine_tune_transformer_for_indices(
+            results_for_fold = _fine_tune_transformer_for_data_split(
                 num_epochs=num_epochs,
                 pretrained_model_name=pretrained_model_name,
                 df=df,
                 feature_name=feature_name,
                 label_column=label_column,
-                indices=folds.fold_indices[k],
+                path_indices=path_indices,
+                split_indices=folds.fold_indices[k],
                 seed=seed,
                 save_model=False,
             )
@@ -296,12 +303,13 @@ def fine_tune_transformer_for_classification(
                                 random_state=data_split_seed)
         
         # compute how well the model performs on this data split
-        results = _fine_tune_transformer_for_indices(
+        results = _fine_tune_transformer_for_data_split(
             pretrained_model_name=pretrained_model_name,
             df=df,
             feature_name=feature_name,
             label_column=label_column,
-            indices=split_data.indices,
+            path_indices=path_indices,
+            split_indices=split_data.indices,
             seed=seed,
             num_epochs=num_epochs,
             save_model=False,
@@ -323,6 +331,7 @@ def fine_tune_transformer_average_seed(
     feature_name: str,
     label_column: str,
     seeds: list[int],
+    path_indices : list | np.array | None = None,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
     split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,
@@ -350,6 +359,7 @@ def fine_tune_transformer_average_seed(
             feature_name=feature_name,
             label_column=label_column,
             seed=seed,
+            path_indices=path_indices,
             data_split_seed=data_split_seed,
             k_fold=k_fold,
             n_splits=n_splits,

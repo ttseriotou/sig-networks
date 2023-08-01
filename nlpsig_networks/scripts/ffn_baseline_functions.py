@@ -425,7 +425,7 @@ def obtain_signatures_history(method: str,
                               label_column: str,
                               embeddings: np.array,
                               seed: int = 42,
-                              path_indices : list | np.array | None = None,
+                              path_indices: list | np.array | None = None,
                               concatenate_current: bool = True) -> torch.tensor:
     # use nlpsig to construct the path as a numpy array
     # first define how we construct the path
