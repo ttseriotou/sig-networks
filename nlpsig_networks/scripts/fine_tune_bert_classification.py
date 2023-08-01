@@ -110,7 +110,7 @@ def _fine_tune_transformer_for_data_split(
         raise TypeError("output_dir must be either a string or None")
     
     if path_indices is not None:
-        df = df.iloc[path_indices]
+        df = df.iloc[path_indices].reset_index(drop=True)
 
     # obtain y_data and create dictionary for converting label_to_id and id_to_label
     y_data = df[label_column]
