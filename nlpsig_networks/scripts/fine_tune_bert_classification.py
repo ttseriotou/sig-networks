@@ -212,7 +212,7 @@ def fine_tune_transformer_for_classification(
     
     # create dummy dataset for passing into Folds and DataSplit
     datasize = len(df.index) if path_indices is None else len(path_indices)
-    dummy_data = torch.rand((len(datasize)))
+    dummy_data = torch.ones(datasize)
     
     if k_fold:
         # perform KFold evaluation and return the performance on validation and test sets
