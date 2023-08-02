@@ -319,11 +319,11 @@ def fine_tune_transformer_for_classification(
             
         return pd.DataFrame({"accuracy": accuracy,
                              "f1": f1,
-                             "f1_scores": f1_scores,
+                             "f1_scores": [f1_scores],
                              "precision": precision,
-                             "precision_scores": precision_scores,
+                             "precision_scores": [precision_scores],
                              "recall": recall,
-                             "recall_scores": recall_scores})
+                             "recall_scores": [recall_scores]})
     else:
         # split dataset
         split_data = DataSplits(x_data=dummy_data,
@@ -369,7 +369,7 @@ def fine_tune_transformer_average_seed(
     path_indices : list | np.array | None = None,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
-    split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,
+    split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | tuple[tuple[Iterable[int], Iterable[int], Iterable[int]]] | None = None,
     k_fold: bool = False,
     n_splits: int = 5,
     validation_metric: str = "f1",
