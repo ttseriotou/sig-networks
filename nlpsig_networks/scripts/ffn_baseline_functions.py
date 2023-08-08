@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import nlpsig
-from nlpsig.classification_utils import DataSplits, Folds
-from nlpsig_networks.pytorch_utils import _get_timestamp, SaveBestModel, training_pytorch, testing_pytorch, set_seed, KFold_pytorch
+from nlpsig_networks.pytorch_utils import _get_timestamp, SaveBestModel, set_seed
 from nlpsig_networks.ffn_baseline import FeedforwardNeuralNetModel
-from nlpsig_networks.focal_loss import FocalLoss
+from nlpsig_networks.scripts.implement_model import implement_model
+from typing import Iterable
 import torch
 import numpy as np
 import pandas as pd
@@ -24,9 +24,13 @@ def implement_ffn(
     seed: int,
     loss: str,
     gamma: float = 0.0,
+    batch_size: int = 64,
     data_split_seed: int = 0,
+    split_ids: torch.Tensor | None = None,
+    split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,
     k_fold: bool = False,
     n_splits: int = 5,
+    patience: int = 10,
     verbose_training: bool = True,
     verbose_results: bool = True,
     verbose_model: bool = False,
@@ -66,13 +70,27 @@ def implement_ffn(
     gamma : float, optional
         Gamma to use for focal loss, by default 0.0.
         Ignored if loss="cross_entropy"
+    batch_size: int, optional
+        Batch size, by default 64
     data_split_seed : int, optional
         The seed which is used when splitting, by default 0
+    split_ids : torch.Tensor | None, optional
+        Groups to split by, default None.
+    split_indices : tuple[Iterable[int], Iterable[int] | None, Iterable[int]] | None, optional
+        Train, validation, test indices to use. If passed, will split the data
+        according to these indices rather than splitting it within the method
+        using the train_size and valid_size provided.
+        First item in the tuple should be the indices for the training set,
+        second item should be the indices for the validaton set (this could
+        be None if no validation set is required), and third item should be
+        indices for the test set.
     k_fold : bool, optional
         Whether or not to use k-fold validation, by default False
     n_splits : int, optional
         Number of splits to use in k-fold validation, by default 5.
         Ignored if k_fold=False
+    patience : int, optional
+        Patience of training, by default 10. 
     verbose_training : bool, optional
         Whether or not to print out training progress, by default True
     verbose_results : bool, optional
@@ -106,114 +124,23 @@ def implement_ffn(
         y_data = torch.tensor(y_data)
     x_data = x_data.float()
     
-    # set some variables for training
-    return_best = True
-    early_stopping = True
-    model_output = f"best_model_{_get_timestamp()}.pkl"
-    validation_metric = "f1"
-    patience = 10
-    
-    if k_fold:
-        # perform KFold evaluation and return the performance on validation and test sets
-        # split dataset
-        folds = Folds(x_data=x_data,
-                      y_data=y_data,
-                      n_splits=n_splits,
-                      shuffle=True,
-                      random_state=data_split_seed)
-        
-         # define loss
-        if loss == "focal":
-            criterion = FocalLoss(gamma = gamma)
-        elif loss == "cross_entropy":
-            criterion = torch.nn.CrossEntropyLoss()
-        else:
-            raise ValueError("criterion must be either 'focal' or 'cross_entropy'")
-
-        # define optimizer
-        optimizer = torch.optim.Adam(ffn_model.parameters(), lr=learning_rate)
-        
-        # perform k-fold evaluation which returns a dataframe with columns for the
-        # loss, accuracy, f1 (macro) and individual f1-scores for each fold
-        # (for both validation and test set)
-        results = KFold_pytorch(folds=folds,
-                                model=ffn_model,
-                                criterion=criterion,
-                                optimizer=optimizer,
-                                num_epochs=num_epochs,
-                                seed=seed,
-                                return_best=return_best,
-                                early_stopping=early_stopping,
-                                patience=patience,
-                                verbose=verbose_training)
-    else:
-        # split dataset
-        split_data = DataSplits(x_data=x_data,
-                                y_data=y_data,
-                                train_size=0.8,
-                                valid_size=0.2,
-                                shuffle=True,
-                                random_state=data_split_seed)
-        train, valid, test = split_data.get_splits(as_DataLoader=True)
-
-        # define loss
-        if loss == "focal":
-            criterion = FocalLoss(gamma = gamma)
-            y_train = split_data.get_splits(as_DataLoader=False)[1]
-            criterion.set_alpha_from_y(y=y_train)
-        elif loss == "cross_entropy":
-            criterion = torch.nn.CrossEntropyLoss()
-        else:
-            raise ValueError("criterion must be either 'focal' or 'cross_entropy'")
-
-        # define optimizer
-        optimizer = torch.optim.Adam(ffn_model.parameters(), lr=learning_rate)
-        
-        # train FFN
-        ffn_model = training_pytorch(model=ffn_model,
-                                     train_loader=train,
-                                     criterion=criterion,
-                                     optimizer=optimizer,
-                                     num_epochs=num_epochs,
-                                     valid_loader=valid,
-                                     seed=seed,
-                                     return_best=return_best,
-                                     output=model_output,
-                                     early_stopping=early_stopping,
-                                     validation_metric=validation_metric,
-                                     patience=patience,
-                                     verbose=verbose_training)
-        
-        # evaluate on validation
-        valid_results = testing_pytorch(model=ffn_model,
-                                        test_loader=valid,
-                                        criterion=criterion,
-                                        verbose=False)
-        
-        # evaluate on test
-        test_results = testing_pytorch(model=ffn_model,
-                                       test_loader=test,
-                                       criterion=criterion,
-                                       verbose=False)
-        
-        results = pd.DataFrame({"loss": test_results["loss"],
-                                "accuracy": test_results["accuracy"], 
-                                "f1": test_results["f1"],
-                                "f1_scores": [test_results["f1_scores"]],
-                                "valid_loss": valid_results["loss"],
-                                "valid_accuracy": valid_results["accuracy"], 
-                                "valid_f1": valid_results["f1"],
-                                "valid_f1_scores": [valid_results["f1_scores"]]})
-
-    if verbose_results:
-        with pd.option_context('display.precision', 3):
-            print(results)
-        
-    # remove any models that have been saved
-    if os.path.exists(model_output):
-        os.remove(model_output)
-    
-    return ffn_model, results
+    return implement_model(model=ffn_model,
+                           num_epochs=num_epochs,
+                           x_data=x_data,
+                           y_data=y_data,
+                           learning_rate=learning_rate,
+                           seed=seed,
+                           loss=loss,
+                           gamma=gamma,
+                           batch_size=batch_size,
+                           data_split_seed=data_split_seed,
+                           split_ids=split_ids,
+                           split_indices=split_indices,
+                           k_fold=k_fold,
+                           n_splits=n_splits,
+                           patience=patience,
+                           verbose_training=verbose_training,
+                           verbose_results=verbose_results)
 
 
 def ffn_hyperparameter_search(
@@ -227,9 +154,13 @@ def ffn_hyperparameter_search(
     seeds : list[int],
     loss: str,
     gamma: float = 0.0,
+    batch_size: int = 64,
     data_split_seed: int = 0,
+    split_ids: torch.Tensor | None = None,
+    split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,
     k_fold: bool = False,
     n_splits: int = 5,
+    patience: int = 10,
     validation_metric: str = "f1",
     results_output: str | None = None,
     verbose: bool = True
@@ -247,7 +178,7 @@ def ffn_hyperparameter_search(
     Parameters
     ----------
     num_epochs : int
-        _description_
+        _description_    
     x_data : torch.tensor | np.array
         _description_
     y_data : torch.tensor | np.array
@@ -266,12 +197,20 @@ def ffn_hyperparameter_search(
         _description_
     gamma : float, optional
         _description_, by default 0.0
+    batch_size: int, optional
+        _description_, by default 64 
     data_split_seed : int, optional
         _description_, by default 0
+    split_ids : torch.Tensor | None, optional
+        _description_, by default None 
+    split_indices : tuple[Iterable[int], Iterable[int], Iterable[int]] | None, optional
+        _description_, by default None
     k_fold : bool, optional
         _description_, by default False
     n_splits : int, optional
         _description_, by default 5
+    patience : int, optional
+        _description_, by default 10
     validation_metric : str, optional
         _description_, by default "f1"
     results_output : str | None, optional
@@ -317,9 +256,13 @@ def ffn_hyperparameter_search(
                                                seed=seed,
                                                loss=loss,
                                                gamma=gamma,
+                                               batch_size=batch_size,
                                                data_split_seed=data_split_seed,
+                                               split_ids=split_ids,
+                                               split_indices=split_indices,
                                                k_fold=k_fold,
                                                n_splits=n_splits,
+                                               patience = patience,
                                                verbose_training=False,
                                                verbose_results=verbose,
                                                verbose_model=verbose_model)
@@ -330,13 +273,15 @@ def ffn_hyperparameter_search(
                     scores.append(results[f"valid_{validation_metric}"].mean())
                     
                     # concatenate to results dataframe
-                    results["hidden_dim"] = [hidden_dim for _ in range(len(results.index))]
+                    results["hidden_dim"] = [tuple(hidden_dim) for _ in range(len(results.index))]
                     results["dropout_rate"] = dropout
                     results["learning_rate"] = lr
                     results["seed"] = seed
-                    results["loss"] = loss
+                    results["loss_function"] = loss
                     results["gamma"] = gamma
                     results["k_fold"] = k_fold
+                    results["n_splits"] = n_splits if k_fold else None
+                    results["batch_size"] = batch_size
                     results["model_id"] = model_id
                     results_df = pd.concat([results_df, results])
                     
@@ -375,20 +320,26 @@ def ffn_hyperparameter_search(
                                         seed=seed,
                                         loss=loss,
                                         gamma=gamma,
+                                        batch_size=batch_size,
                                         data_split_seed=data_split_seed,
+                                        split_ids=split_ids,
+                                        split_indices=split_indices,
                                         k_fold=k_fold,
                                         n_splits=n_splits,
+                                        patience=patience,
                                         verbose_training=False,
                                         verbose_results=False)
         
-        test_results["hidden_dim"] = [checkpoint["extra_info"]["hidden_dim"]
+        test_results["hidden_dim"] = [tuple(checkpoint["extra_info"]["hidden_dim"])
                                       for _ in range(len(results.index))]
         test_results["dropout_rate"] = checkpoint["extra_info"]["dropout_rate"]
         test_results["learning_rate"] = checkpoint["extra_info"]["learning_rate"]
         test_results["seed"] = seed
-        test_results["loss"] = loss
+        test_results["loss_function"] = loss
         test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
+        test_results["n_splits"] = n_splits if k_fold else None
+        test_results["batch_size"] = batch_size
         test_results_df = pd.concat([test_results_df, test_results])
         
         # save metric that we want to validate on
@@ -440,7 +391,7 @@ def obtain_mean_history(df: pd.DataFrame,
         id = text[id_column]
         timeline_index = text["timeline_index"]
 
-        # obtain history of the pariicular text
+        # obtain history of the particular text
         history = paths.df[
             (paths.df[id_column] == id) & (paths.df["timeline_index"] <= timeline_index)
         ][colnames]
@@ -473,7 +424,6 @@ def obtain_signatures_history(method: str,
                               id_column: str,
                               label_column: str,
                               embeddings: np.array,
-                              k: int,
                               seed: int = 42,
                               path_indices : list | np.array | None = None,
                               concatenate_current: bool = True) -> torch.tensor:
@@ -481,8 +431,7 @@ def obtain_signatures_history(method: str,
     # first define how we construct the path
     path_specifics = {"pad_by": "history",
                       "zero_padding": True,
-                      "method": "k_last",
-                      "k": k,
+                      "method": "max",
                       "time_feature": None,
                       "embeddings": "dim_reduced",
                       "include_current_embedding": True}
@@ -516,9 +465,9 @@ def obtain_signatures_history(method: str,
     # convert to torch tensor to compute signature using signatory
     path = torch.from_numpy(path).float()
     if log_signature:
-        sig = signatory.signature(path, sig_depth).float()
-    else:
         sig = signatory.logsignature(path, sig_depth).float()
+    else:
+        sig = signatory.signature(path, sig_depth).float()
     
     # concatenate with current embedding
     if concatenate_current:
@@ -543,14 +492,17 @@ def histories_baseline_hyperparameter_search(
     seeds : list[int],
     loss: str,
     gamma: float = 0.0,
+    batch_size: int = 64,
     log_signature: bool = False,
     dim_reduce_methods: list[str] | None = None,
     dimension_and_sig_depths: list[tuple[int, int]] | None = None,
-    history_lengths: list[int] = [10],
     path_indices : list | np.array | None = None,
     data_split_seed: int = 0,
+    split_ids: torch.Tensor | None = None,
+    split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,
     k_fold: bool = False,
     n_splits: int = 5,
+    patience: int = 10,
     validation_metric: str = "f1",
     results_output: str | None = None,
     verbose: bool = True
@@ -572,73 +524,70 @@ def histories_baseline_hyperparameter_search(
     results_df = pd.DataFrame()
     model_id = 0
     if use_signatures:
-        for k in tqdm(history_lengths):
-            if verbose:
-                print("\n" + "-" * 50)
-                print(f"k: {k}")
-            for dimension, sig_depth in tqdm(dimension_and_sig_depths):
-                for method in tqdm(dim_reduce_methods):
-                    if verbose:
-                        print("\n" + "#" * 50)
-                        print(f"dimension: {dimension} | "
-                            f"sig_depth: {sig_depth} | "
-                            f"method: {method}")
-                    
-                    # obtain the ffn input by dimension reduction and computing signatures
-                    x_data = obtain_signatures_history(
-                        method=method,
-                        dimension=dimension,
-                        sig_depth=sig_depth,
-                        log_signature=log_signature,
-                        df=df,
-                        id_column=id_column,
-                        label_column=label_column,
-                        embeddings=embeddings,
-                        k=k,
-                        path_indices=path_indices,
-                        concatenate_current=True
-                    )
+        for dimension, sig_depth in tqdm(dimension_and_sig_depths):
+            for method in tqdm(dim_reduce_methods):
+                if verbose:
+                    print("\n" + "#" * 50)
+                    print(f"dimension: {dimension} | "
+                          f"sig_depth: {sig_depth} | "
+                          f"method: {method}")
+                
+                # obtain the ffn input by dimension reduction and computing signatures
+                x_data = obtain_signatures_history(
+                    method=method,
+                    dimension=dimension,
+                    sig_depth=sig_depth,
+                    log_signature=log_signature,
+                    df=df,
+                    id_column=id_column,
+                    label_column=label_column,
+                    embeddings=embeddings,
+                    path_indices=path_indices,
+                    concatenate_current=True
+                )
 
-                    # perform hyperparameter search for FFN
-                    results, best_valid_metric, FFN_info = ffn_hyperparameter_search(
-                        num_epochs=num_epochs,
-                        x_data=x_data,
-                        y_data=y_data,
-                        output_dim=output_dim,
-                        hidden_dim_sizes=hidden_dim_sizes,
-                        dropout_rates=dropout_rates,
-                        learning_rates=learning_rates,
-                        seeds=seeds,
-                        loss=loss,
-                        gamma=gamma,
-                        data_split_seed=data_split_seed,
-                        k_fold=k_fold,
-                        n_splits=n_splits,
-                        validation_metric=validation_metric,
-                        results_output=None,
-                        verbose=False
-                    )
+                # perform hyperparameter search for FFN
+                results, _, best_valid_metric, FFN_info = ffn_hyperparameter_search(
+                    num_epochs=num_epochs,
+                    x_data=x_data,
+                    y_data=y_data,
+                    output_dim=output_dim,
+                    hidden_dim_sizes=hidden_dim_sizes,
+                    dropout_rates=dropout_rates,
+                    learning_rates=learning_rates,
+                    seeds=seeds,
+                    loss=loss,
+                    gamma=gamma,
+                    batch_size=batch_size,
+                    data_split_seed=data_split_seed,
+                    split_ids=split_ids,
+                    split_indices=split_indices,
+                    k_fold=k_fold,
+                    n_splits=n_splits,
+                    patience=patience,
+                    validation_metric=validation_metric,
+                    results_output=None,
+                    verbose=False
+                )
 
-                    # concatenate to results dataframe
-                    results["k"] = k
-                    results["input_dim"] = x_data.shape[1]
-                    results["dimension"] = dimension
-                    results["sig_depth"] = sig_depth
-                    results["method"] = method
-                    results["log_signature"] = log_signature
-                    results["model_id"] = [float(f"{model_id}.{id}") for id in results["model_id"]]
-                    results_df = pd.concat([results_df, results])
-                    
-                    best_model(current_valid_metric=best_valid_metric,
-                            extra_info={"k": k,
-                                        "input_dim": x_data.shape[1],
-                                        "dimension": dimension,
-                                        "sig_depth": sig_depth,
-                                        "method": method,
-                                        "log_signature": log_signature,
-                                        **FFN_info})
-                    
-                    model_id += 1
+                # concatenate to results dataframe
+                results["input_dim"] = x_data.shape[1]
+                results["dimension"] = dimension
+                results["sig_depth"] = sig_depth
+                results["method"] = method
+                results["log_signature"] = log_signature
+                results["model_id"] = [float(f"{model_id}.{id}") for id in results["model_id"]]
+                results_df = pd.concat([results_df, results])
+                
+                best_model(current_valid_metric=best_valid_metric,
+                        extra_info={"input_dim": x_data.shape[1],
+                                    "dimension": dimension,
+                                    "sig_depth": sig_depth,
+                                    "method": method,
+                                    "log_signature": log_signature,
+                                    **FFN_info})
+                
+                model_id += 1
     else:
         # obtain the ffn input by averaging over history
         x_data = obtain_mean_history(df=df,
@@ -660,9 +609,13 @@ def histories_baseline_hyperparameter_search(
             seeds=seeds,
             loss=loss,
             gamma=gamma,
+            batch_size=batch_size,
             data_split_seed=data_split_seed,
+            split_ids=split_ids,
+            split_indices=split_indices,
             k_fold=k_fold,
             n_splits=n_splits,
+            patience = patience,
             validation_metric=validation_metric,
             results_output=None,
             verbose=False
@@ -695,7 +648,6 @@ def histories_baseline_hyperparameter_search(
                                            id_column=id_column,
                                            label_column=label_column,
                                            embeddings=embeddings,
-                                           k=checkpoint["extra_info"]["k"],
                                            path_indices=path_indices,
                                            concatenate_current=True)
     else:
@@ -720,28 +672,32 @@ def histories_baseline_hyperparameter_search(
                                         seed=seed,
                                         loss=loss,
                                         gamma=gamma,
+                                        batch_size=batch_size,
                                         data_split_seed=data_split_seed,
+                                        split_ids=split_ids,
+                                        split_indices=split_indices,
                                         k_fold=k_fold,
                                         n_splits=n_splits,
+                                        patience = patience,
                                         verbose_training=False,
                                         verbose_results=False)
         
-        test_results["hidden_dim"] = [checkpoint["extra_info"]["hidden_dim"]
+        test_results["hidden_dim"] = [tuple(checkpoint["extra_info"]["hidden_dim"])
                                       for _ in range(len(test_results.index))]
         test_results["dropout_rate"] = checkpoint["extra_info"]["dropout_rate"]
         test_results["learning_rate"] = checkpoint["extra_info"]["learning_rate"]
         test_results["seed"] = seed
-        test_results["loss"] = loss
+        test_results["loss_function"] = loss
         test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
-        if use_signatures:
-            test_results["k"] = checkpoint["extra_info"]["k"]
+        test_results["n_splits"] = n_splits if k_fold else None
+        test_results["batch_size"] = batch_size
         test_results["input_dim"] = checkpoint["extra_info"]["input_dim"]
         if use_signatures:
             test_results["dimension"] = checkpoint["extra_info"]["dimension"]
             test_results["sig_depth"] = checkpoint["extra_info"]["sig_depth"]
             test_results["method"] = checkpoint["extra_info"]["method"]
-            results["log_signature"] = checkpoint["extra_info"]["log_signature"]
+            test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
         test_results_df = pd.concat([test_results_df, test_results])
         
         # save metric that we want to validate on

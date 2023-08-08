@@ -2,7 +2,7 @@ from __future__ import annotations
 from signatory import Signature, LogSignature, signature_channels, logsignature_channels, Augment
 import torch
 import torch.nn as nn
-
+import numpy as np
 
 class SWLSTM(nn.Module):
     """
@@ -74,7 +74,7 @@ class SWLSTM(nn.Module):
                 num_layers=1,
                 batch_first=True,
                 bidirectional=False if l!=(len(self.hidden_dim)-1) else self.BiLSTM,
-            ).double())
+            ))
         
         # make a ModuleList from the signatures and LSTM layers
         self.signature_layers = nn.ModuleList(self.signature_layers)
@@ -134,10 +134,10 @@ class SWNU(nn.Module):
     def __init__(
         self,
         input_channels: int,
-        output_channels: int,
         log_signature: bool,
         sig_depth: int,
         hidden_dim: list[int] | int,
+        output_channels: int | None = None,
         augmentation_type: str = "Conv1d",
         hidden_dim_aug: list[int] | int | None = None,
         BiLSTM: bool = False,
@@ -149,14 +149,15 @@ class SWNU(nn.Module):
         ----------
         input_channels : int
             Dimension of the embeddings that will be passed in.
-        output_channels : int
-            Requested dimension of the embeddings after convolution layer.
         log_signature : bool
             Whether or not to use the log signature or standard signature.
         sig_depth : int
             The depth to truncate the path signature at.
         hidden_dim : list[int] | int
             Dimensions of the hidden layers in the SNWU blocks.
+        output_channels : int | None, optional
+            Requested dimension of the embeddings after convolution layer.
+            If None, will be set to the last item in `hidden_dim`, by default None.
         augmentation_type : str, optional
             Method of augmenting the path, by default "Conv1d".
             Options are:
@@ -173,13 +174,14 @@ class SWNU(nn.Module):
         super(SWNU, self).__init__()
 
         self.input_channels = input_channels
-        self.output_channels = output_channels
         self.log_signature = log_signature
         self.sig_depth = sig_depth
         
         if isinstance(hidden_dim, int):
             hidden_dim = [hidden_dim]
         self.hidden_dim = hidden_dim
+        
+        self.output_channels = output_channels if output_channels is not None else hidden_dim[-1]
         
         if augmentation_type not in ["Conv1d", "signatory"]:
             raise ValueError("`augmentation_type` must be 'Conv1d' or 'signatory'.")
@@ -199,7 +201,7 @@ class SWNU(nn.Module):
             kernel_size=3,
             stride=1, 
             padding=1,
-        ).double()
+        )
         
         # alternative to convolution: using Augment from signatory 
         self.augment = Augment(
@@ -210,7 +212,7 @@ class SWNU(nn.Module):
             kernel_size=3,
             stride=1, 
             padding=1,
-        ).double()
+        )
         
         # non-linearity
         self.tanh = nn.Tanh()
