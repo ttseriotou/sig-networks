@@ -10,7 +10,7 @@ First create an environment and install [`nlpsig`](https://github.com/datasig-ac
 
 ```
 git clone git@github.com:datasig-ac-uk/nlpsig.git
-git clone git@github.com/ttseriotou/nlpsig-networks.git
+git clone git@github.com:ttseriotou/nlpsig-networks.git
 cd nlpsig
 conda env create --name nlpsig-networks python=3.8
 conda activate nlpsig-networks
