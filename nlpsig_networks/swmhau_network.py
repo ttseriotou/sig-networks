@@ -1,14 +1,13 @@
 from __future__ import annotations
-import signatory
 import torch
 import torch.nn as nn
-from nlpsig_networks.swnu import SWNU
+from nlpsig_networks.swmhau import SWMHAU
 from nlpsig_networks.ffn_baseline import FeedforwardNeuralNetModel
 
 
-class SWNUNetwork(nn.Module):
+class SWMHAUNetwork(nn.Module):
     """
-    Stacked Deep Signature Neural Network for classification.
+    Signature Window using Multihead Attention Unit (SWMHAU) network for classification.
     """
 
     def __init__(
@@ -18,18 +17,18 @@ class SWNUNetwork(nn.Module):
         embedding_dim: int,
         log_signature: bool,
         sig_depth: int,
-        hidden_dim_swnu: list[int] | int,
+        num_heads: int,
+        num_layers: int,
         hidden_dim_ffn: list[int] | int,
         output_dim: int,
         dropout_rate: float,
         output_channels: int | None = None,
         augmentation_type: str = "Conv1d",
         hidden_dim_aug: list[int] | int | None = None,
-        BiLSTM: bool = False,
         comb_method: str = "concatenation",
     ):
         """
-        SWNU network for classification.
+        Signature Window using Multihead Attention Unit (SWMHAU) network for classification.
 
         Parameters
         ----------
@@ -43,8 +42,10 @@ class SWNUNetwork(nn.Module):
             Whether or not to use the log signature or standard signature.
         sig_depth : int
             The depth to truncate the path signature at.
-        hidden_dim_swnu : list[int] | int
-            Dimensions of the hidden layers in the SNWU blocks.
+        num_heads : int
+            The number of heads in the Multihead Attention blocks.
+        num_layers : int
+            The number of layers in the SWMHA.
         hidden_dim_ffn : list[int] | int
             Dimension of the hidden layers in the FFN.
         output_dim : int
@@ -63,9 +64,6 @@ class SWNUNetwork(nn.Module):
             Dimensions of the hidden layers in the augmentation layer.
             Passed into `Augment` class from `signatory` package if
             `augmentation_type='signatory'`, by default None.
-        BiLSTM : bool, optional
-            Whether or not a birectional LSTM is used,
-            by default False (unidirectional LSTM is used in this case).
         comb_method : str, optional
             Determines how to combine the path signature and embeddings,
             by default "gated_addition".
@@ -75,30 +73,22 @@ class SWNUNetwork(nn.Module):
             - gated_concatenation: concatenation of linearly gated path signature and embedding vector
             - scaled_concatenation: concatenation of single value scaled path signature and embedding vector
         """
-        super(SWNUNetwork, self).__init__()
+        super(SWMHAUNetwork, self).__init__()
 
         self.input_channels = input_channels
         
-        self.swnu = SWNU(input_channels=input_channels,
-                         output_channels=output_channels,
-                         log_signature=log_signature,
-                         sig_depth=sig_depth,
-                         hidden_dim=hidden_dim_swnu,
-                         augmentation_type=augmentation_type,
-                         hidden_dim_aug=hidden_dim_aug,
-                         BiLSTM=BiLSTM)
+        self.swmhau = SWMHAU(input_channels=input_channels,
+                             output_channels=output_channels,
+                             log_signature=log_signature,
+                             sig_depth=sig_depth,
+                             num_heads=num_heads,
+                             num_layers=num_layers,
+                             augmentation_type=augmentation_type,
+                             hidden_dim_aug=hidden_dim_aug)
         
-        # signature without lift (for passing into FFN)
-        if log_signature:
-            signature_output_channels = signatory.logsignature_channels(
-                in_channels= self.swnu.hidden_dim[-1], depth=sig_depth
-            )
-        else:
-            signature_output_channels = signatory.signature_channels(
-                channels= self.swnu.hidden_dim[-1], depth=sig_depth
-            )
+        signature_output_channels = self.swmhau.swmha.signature_terms
         
-        # determining how to concatenate features to the SWNU features
+        # determining how to concatenate features to the SWMHAU features
         self.embedding_dim = embedding_dim
         self.num_features = num_features
         if comb_method not in ["concatenation", "gated_addition", "gated_concatenation", "scaled_concatenation"]:
@@ -163,8 +153,8 @@ class SWNUNetwork(nn.Module):
 
     def forward(self, x: torch.Tensor):
         # x has dimensions [batch, length of signal, channels]
-        # use SWNU to obtain feature set
-        out = self.swnu(x)
+        # use SWMHAU to obtain feature set
+        out = self.swmhau(x)
 
         # combine last post embedding
         if x.shape[2] > self.input_channels:

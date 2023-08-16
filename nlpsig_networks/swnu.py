@@ -6,7 +6,7 @@ import numpy as np
 
 class SWLSTM(nn.Module):
     """
-    Signature Window Network Unit.
+    Signature Window using LSTM (SWLSTM).
     """
     
     def __init__(
@@ -128,7 +128,7 @@ class SWLSTM(nn.Module):
     
 class SWNU(nn.Module):
     """
-    Signature Window Network Unit.
+    Signature Window Network Unit (SWNU) class (using LSTM blocks).
     """
     
     def __init__(
@@ -143,7 +143,7 @@ class SWNU(nn.Module):
         BiLSTM: bool = False,
     ):
         """
-        Signature Window Network Unit.
+        Signature Window Network Unit (SWNU) class (using LSTM blocks).
 
         Parameters
         ----------
