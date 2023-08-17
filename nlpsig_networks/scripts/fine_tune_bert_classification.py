@@ -3,12 +3,13 @@ from nlpsig import TextEncoder
 import evaluate
 import numpy as np
 import pandas as pd
-from typing import Iterable
+from typing import Callable, Iterable
 import torch
 from tqdm.auto import tqdm
 from sklearn import metrics
 from nlpsig.classification_utils import DataSplits, Folds
 from nlpsig_networks.pytorch_utils import set_seed
+from nlpsig_networks.focal_loss import FocalLoss
 import os
 import shutil
 from datasets.arrow_dataset import Dataset
@@ -18,6 +19,7 @@ from transformers import (
     DataCollatorWithPadding,
     PreTrainedModel,
     PreTrainedTokenizer,
+    AdamW,
 )
 from typing import Iterable
 
@@ -107,6 +109,8 @@ def _fine_tune_transformer_for_data_split(
     feature_name: str,
     label_column: str,
     seed: int,
+    loss: str,
+    gamma: float = 0.0,
     batch_size: int = 64,
     path_indices : list | np.array | None = None,
     split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,
@@ -135,6 +139,16 @@ def _fine_tune_transformer_for_data_split(
     label_to_id = {y_data.unique()[i]: i for i in range(len(y_data.unique()))}
     id_to_label = {v: k for k, v in label_to_id.items()}
     output_dim = len(label_to_id.values())
+    
+    # define loss
+    if loss == "focal":
+        criterion = FocalLoss(gamma = gamma)
+        y_train = torch.tensor(y_data[split_indices[0]].values)
+        criterion.set_alpha_from_y(y=y_train)
+    elif loss == "cross_entropy":
+        criterion = torch.nn.CrossEntropyLoss()
+    else:
+        raise ValueError("criterion must be either 'focal' or 'cross_entropy'")
     
     # create column named "label" which are the corresponding IDs
     df["label"] = df[label_column].apply(lambda x: label_to_id[x])
@@ -191,7 +205,10 @@ def _fine_tune_transformer_for_data_split(
         return {"accuracy": accuracy, "f1": f1}
 
     text_encoder.set_up_trainer(data_collator=data_collator,
-                                compute_metrics=_compute_metrics)
+                                compute_metrics=_compute_metrics,
+                                optimizer=AdamW(params=model.parameters(),
+                                                weight_decay=0.0001),
+                                custom_loss=criterion.forward)
     
     # train model
     text_encoder.fit_transformer_with_trainer_api()
@@ -224,6 +241,8 @@ def fine_tune_transformer_for_classification(
     feature_name: str,
     label_column: str,
     seed: int,
+    loss: str,
+    gamma: float = 0.0,
     path_indices : list | np.array | None = None,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
@@ -279,6 +298,8 @@ def fine_tune_transformer_for_classification(
                 path_indices=path_indices,
                 split_indices=folds.fold_indices[k],
                 seed=seed,
+                loss=loss,
+                gamma=gamma,
                 save_model=False,
                 device=device,
                 verbose=verbose,
@@ -344,6 +365,8 @@ def fine_tune_transformer_for_classification(
             path_indices=path_indices,
             split_indices=split_data.indices,
             seed=seed,
+            loss=loss,
+            gamma=gamma,
             num_epochs=num_epochs,
             save_model=False,
             device=device,
@@ -366,6 +389,8 @@ def fine_tune_transformer_average_seed(
     feature_name: str,
     label_column: str,
     seeds: list[int],
+    loss: str,
+    gamma: float = 0.0,
     path_indices : list | np.array | None = None,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
@@ -395,6 +420,8 @@ def fine_tune_transformer_average_seed(
             feature_name=feature_name,
             label_column=label_column,
             seed=seed,
+            loss=loss,
+            gamma=gamma,
             path_indices=path_indices,
             data_split_seed=data_split_seed,
             k_fold=k_fold,
@@ -407,6 +434,8 @@ def fine_tune_transformer_average_seed(
         )
         
         test_results["seed"] = seed
+        test_results["loss"] = loss
+        test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
         test_results_df = pd.concat([test_results_df, test_results])
         
