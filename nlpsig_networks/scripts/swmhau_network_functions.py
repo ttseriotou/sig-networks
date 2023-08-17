@@ -337,7 +337,7 @@ def swmhau_network_hyperparameter_search(
             log_signature=checkpoint["extra_info"]["log_signature"],
             output_dim=output_dim,
             num_heads=checkpoint["extra_info"]["num_heads"],
-            num_layers=checkpoint["extra_info"]["n_layers"],
+            num_layers=checkpoint["extra_info"]["num_layers"],
             ffn_hidden_dim=checkpoint["extra_info"]["ffn_hidden_dim"],
             dropout_rate=checkpoint["extra_info"]["dropout_rate"],
             learning_rate=checkpoint["extra_info"]["learning_rate"],
@@ -378,7 +378,7 @@ def swmhau_network_hyperparameter_search(
         test_results["embedding_dim"] = embedding_dim
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
         test_results["num_heads"] = checkpoint["extra_info"]["num_heads"]
-        test_results["num_layers"] = checkpoint["extra_info"]["n_layers"]
+        test_results["num_layers"] = checkpoint["extra_info"]["num_layers"]
         test_results["ffn_hidden_dim"] = [tuple(checkpoint["extra_info"]["ffn_hidden_dim"])
                                           for _ in range(len(test_results.index))]
         test_results["dropout_rate"] = checkpoint["extra_info"]["dropout_rate"]
