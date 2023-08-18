@@ -19,7 +19,6 @@ from transformers import (
     DataCollatorWithPadding,
     PreTrainedModel,
     PreTrainedTokenizer,
-    AdamW,
 )
 from typing import Iterable
 
@@ -148,7 +147,7 @@ def _fine_tune_transformer_for_data_split(
     elif loss == "cross_entropy":
         criterion = torch.nn.CrossEntropyLoss()
     else:
-        raise ValueError("criterion must be either 'focal' or 'cross_entropy'")
+        raise ValueError("loss must be either 'focal' or 'cross_entropy'")
     
     # create column named "label" which are the corresponding IDs
     df["label"] = df[label_column].apply(lambda x: label_to_id[x])
@@ -207,9 +206,6 @@ def _fine_tune_transformer_for_data_split(
 
     text_encoder.set_up_trainer(data_collator=data_collator,
                                 compute_metrics=_compute_metrics,
-                                optimizers=(AdamW(params=model.parameters(),
-                                                  weight_decay=0.0001),
-                                            None),
                                 custom_loss=criterion.forward)
     
     # train model
