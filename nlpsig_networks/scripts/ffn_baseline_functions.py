@@ -380,7 +380,7 @@ def obtain_mean_history(df: pd.DataFrame,
                                label_column=label_column,
                                embeddings=embeddings)
     # obtain column names of the embeddings in paths.df
-    colnames = paths._obtain_colnames(embeddings="full")
+    colnames = paths._obtain_embedding_colnames(embeddings="full")
     
     # initialise empty array to store mean history
     mean_history = np.zeros((len(df.index), len(colnames)))
@@ -432,7 +432,7 @@ def obtain_signatures_history(method: str,
     path_specifics = {"pad_by": "history",
                       "zero_padding": True,
                       "method": "max",
-                      "time_feature": None,
+                      "features": None,
                       "embeddings": "dim_reduced",
                       "include_current_embedding": True}
     

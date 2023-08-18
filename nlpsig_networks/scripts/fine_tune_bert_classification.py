@@ -175,7 +175,8 @@ def _fine_tune_transformer_for_data_split(
                                feature_name=feature_name,
                                model=model,
                                tokenizer=tokenizer,
-                               data_collator=data_collator)
+                               data_collator=data_collator,
+                               verbose=False)
     
     # tokenize the text in df[feature_name]
     text_encoder.tokenize_text()
