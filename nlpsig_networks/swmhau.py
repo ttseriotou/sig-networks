@@ -74,6 +74,9 @@ class SWMHA(nn.Module):
             [nn.Linear(self.signature_terms, self.input_size) for _ in range(self.num_layers)]
         )
 
+        # layer norm
+        self.norm = nn.LayerNorm(self.signature_terms)
+        
         # final signature without lift (i.e. no expanding windows)
         if self.log_signature:
             self.signature2 = LogSignature(depth=sig_depth, stream=False)
@@ -106,8 +109,10 @@ class SWMHA(nn.Module):
         for l in range(self.num_layers):
             # apply signature with lift layer
             x = self.signature_layers[l](x)
-            # apply MHA layer
-            x = self.mha_layers[l](x, x, x)[0]
+            # apply MHA layer to the signatures
+            attention_out = self.mha_layers[l](x, x, x)[0]
+            # apply layer norm and residual connection
+            x = self.norm(x + attention_out)
             # apply linear layer
             x = self.linear_layers[l](x)
 
