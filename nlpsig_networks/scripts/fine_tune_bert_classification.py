@@ -3,7 +3,7 @@ from nlpsig import TextEncoder
 import evaluate
 import numpy as np
 import pandas as pd
-from typing import Callable, Iterable
+from typing import Iterable
 import torch
 from tqdm.auto import tqdm
 from sklearn import metrics
@@ -143,7 +143,7 @@ def _fine_tune_transformer_for_data_split(
     # define loss
     if loss == "focal":
         criterion = FocalLoss(gamma = gamma)
-        y_train = torch.tensor(y_data[split_indices[0]].values)
+        y_train = torch.tensor(y_data.apply(lambda x: label_to_id[x]).values)
         criterion.set_alpha_from_y(y=y_train)
     elif loss == "cross_entropy":
         criterion = torch.nn.CrossEntropyLoss()
@@ -206,8 +206,9 @@ def _fine_tune_transformer_for_data_split(
 
     text_encoder.set_up_trainer(data_collator=data_collator,
                                 compute_metrics=_compute_metrics,
-                                optimizer=AdamW(params=model.parameters(),
-                                                weight_decay=0.0001),
+                                optimizers=(AdamW(params=model.parameters(),
+                                                  weight_decay=0.0001),
+                                            None),
                                 custom_loss=criterion.forward)
     
     # train model
