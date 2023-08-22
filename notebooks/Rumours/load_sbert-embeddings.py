@@ -42,4 +42,4 @@ with open(path, 'rb') as f:
 df_emb = df_rumours[['id']].merge(df_emb, on="id", how="left")
 df_emb = df_emb.reset_index(drop=True)
 
-sbert_embeddings = torch.tensor(df_emb[[c for c in df_emb.columns if re.match("^e\w*[0-9]", c)]].values)
+sbert_embeddings = np.array(df_emb[[c for c in df_emb.columns if re.match("^e\w*[0-9]", c)]].values).astype("float")
