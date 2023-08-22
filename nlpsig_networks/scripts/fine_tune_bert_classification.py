@@ -59,7 +59,7 @@ def testing_transformer(
 
     # convert to torch tensor
     predicted = torch.tensor(predicted)
-    labels = torch.tensor(test_dataset["label"])
+    labels = torch.tensor(test_dataset["label_as_id"])
     
     # compute accuracy
     accuracy = ((predicted == labels).sum() / len(labels)).item()
@@ -135,22 +135,22 @@ def _fine_tune_transformer_for_data_split(
 
     # obtain y_data and create dictionary for converting label_to_id and id_to_label
     y_data = df[label_column]
-    label_to_id = {y_data.unique()[i]: i for i in range(len(y_data.unique()))}
+    label_to_id = {str(y_data.unique()[i]): i for i in range(len(y_data.unique()))}
     id_to_label = {v: k for k, v in label_to_id.items()}
     output_dim = len(label_to_id.values())
     
     # define loss
     if loss == "focal":
         criterion = FocalLoss(gamma = gamma)
-        y_train = torch.tensor(y_data.apply(lambda x: label_to_id[x]).values)
+        y_train = torch.tensor(y_data.apply(lambda x: label_to_id[str(x)]).values)
         criterion.set_alpha_from_y(y=y_train)
     elif loss == "cross_entropy":
         criterion = torch.nn.CrossEntropyLoss()
     else:
         raise ValueError("loss must be either 'focal' or 'cross_entropy'")
     
-    # create column named "label" which are the corresponding IDs
-    df["label"] = df[label_column].apply(lambda x: label_to_id[x])
+    # create column named "label_as_id" which are the corresponding IDs
+    df["label_as_id"] = df[label_column].apply(lambda x: label_to_id[str(x)])
     
     # initialise model, tokenizer and data_collator
     model = AutoModelForSequenceClassification.from_pretrained(
