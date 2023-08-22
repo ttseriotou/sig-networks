@@ -5,10 +5,9 @@ import re
 import torch
 import os
 
-#read data
-cwd = os.getcwd()
-sbert_file = cwd+'/notebooks/Rumours/sbert.pkl'
-with open(sbert_file,'rb') as g:
+# read data
+path = os.path.join(os.path.dirname(__file__), "sbert.pkl")
+with open(path,'rb') as g:
     emb_data = pickle.load(g)
 
 def embedding_df(emb_data):
@@ -35,8 +34,9 @@ def embedding_df(emb_data):
 
 df_emb = embedding_df(emb_data)
 
-#ALIGN THE EMBEDDINGS WITH THE RUMOUR TWEETS BY ID
-with open("notebooks/Rumours/load_rumours.py") as f:
+# ALIGN THE EMBEDDINGS WITH THE RUMOUR TWEETS BY ID
+path = os.path.join(os.path.dirname(__file__), "load_rumours.py")
+with open(path, 'rb') as f:
     exec(f.read()) 
 
 df_emb = df_rumours[['id']].merge(df_emb, on="id", how="left")
