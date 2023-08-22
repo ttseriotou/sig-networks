@@ -454,8 +454,7 @@ def swnu_network_hyperparameter_search(
         test_results["k_fold"] = k_fold
         test_results["n_splits"] = n_splits if k_fold else None
         test_results["augmentation_type"] = checkpoint["extra_info"]["augmentation_type"]
-        test_results["hidden_dim_aug"] = [tuple(checkpoint["extra_info"]["hidden_dim_aug"])
-                                           for _ in range(len(test_results.index))] if checkpoint["extra_info"]["hidden_dim_aug"] is not None else None
+        test_results["hidden_dim_aug"] = None if checkpoint["extra_info"]["hidden_dim_aug"] is None else [tuple([checkpoint["extra_info"]["hidden_dim_aug"]]) for _ in range(len(test_results.index))] if (type(checkpoint["extra_info"]["hidden_dim_aug"])==int) else [tuple(checkpoint["extra_info"]["hidden_dim_aug"]) for _ in range(len(test_results.index))]
         test_results["comb_method"] = checkpoint["extra_info"]["comb_method"]
         test_results["batch_size"] = batch_size
         test_results_df = pd.concat([test_results_df, test_results])

@@ -339,7 +339,7 @@ def lstm_hyperparameter_search(
                         
                         # concatenate to results dataframe
                         results["k"] = k
-                        results["num_layers"] = num_layers,
+                        results["num_layers"] = num_layers
                         results["bidirectional"] = bidirectional
                         results["hidden_dim"] = hidden_dim
                         results["dropout_rate"] = dropout
