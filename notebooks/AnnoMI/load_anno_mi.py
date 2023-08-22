@@ -10,6 +10,8 @@ import torch
 # load in data
 data_path = os.path.join(os.path.dirname(__file__), "AnnoMI-full.csv")
 anno_mi = pd.read_csv(data_path)
+# removing duplicates
+anno_mi = anno_mi.drop_duplicates(subset=['transcript_id', 'utterance_id'])
 # adding datetime column
 anno_mi["datetime"] = pd.to_datetime(anno_mi["timestamp"])
 # drop columns for video title and video url
