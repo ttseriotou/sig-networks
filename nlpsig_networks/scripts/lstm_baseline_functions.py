@@ -161,7 +161,7 @@ def obtain_path(df: pd.DataFrame,
                       "zero_padding": True,
                       "method": "k_last",
                       "k": k,
-                      "time_feature": None,
+                      "features": None,
                       "embeddings": "full",
                       "include_current_embedding": True}
     

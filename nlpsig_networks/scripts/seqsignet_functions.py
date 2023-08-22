@@ -497,6 +497,10 @@ def seqsignet_hyperparameter_search(
         print("saving results dataframe to CSV for this "
             f"hyperparameter search in {results_output}")
         results_df.to_csv(results_output)
+        best_results_output = results_output.replace(".csv", "_best_model.csv")
+        print("saving the best model results dataframe to CSV for this "
+              f"hyperparameter search in {best_results_output}")
+        test_results_df.to_csv(best_results_output)
     
     # remove any models that have been saved
     if os.path.exists(model_output):
