@@ -14,8 +14,7 @@ class SeqSigNet(nn.Module):
     def __init__(
         self, 
         input_channels: int, 
-        output_channels: int,
-        num_time_features: int, 
+        num_features: int, 
         embedding_dim: int, 
         log_signature: bool,
         sig_depth: int, 
@@ -24,6 +23,7 @@ class SeqSigNet(nn.Module):
         hidden_dim_ffn: list[int] | int,
         output_dim: int, 
         dropout_rate: float, 
+        output_channels: int | None = None,
         augmentation_type: str = 'Conv1d', 
         hidden_dim_aug: list[int] | int | None = None,
         BiLSTM: bool = False,
@@ -38,9 +38,7 @@ class SeqSigNet(nn.Module):
         ----------
         input_channels : int
             Dimension of the (dimensonally reduced) history embeddings that will be passed in. 
-        output_channels : int
-            Requested dimension of the embeddings after convolution layer.
-        num_time_features : int
+        num_features : int
             Number of time features to add to FFN input. If none, set to zero.
         embedding_dim: int
             Dimensions of current BERT post embedding. Usually 384 or 768.
@@ -59,6 +57,9 @@ class SeqSigNet(nn.Module):
             Dimension of the output layer in the FFN.
         dropout_rate : float
             Dropout rate in the FFN.
+        output_channels : int | None, optional
+            Requested dimension of the embeddings after convolution layer.
+            If None, will be set to the last item in `hidden_dim`, by default None.
         augmentation_type : str, optional
             Method of augmenting the path, by default "Conv1d".
             Options are:
@@ -86,7 +87,7 @@ class SeqSigNet(nn.Module):
         self.input_channels = input_channels
         
         self.embedding_dim = embedding_dim
-        self.num_time_features = num_time_features
+        self.num_features = num_features
         
         if comb_method not in ["concatenation", "gated_addition", "gated_concatenation", "scaled_concatenation"]:
             raise ValueError(
@@ -126,9 +127,9 @@ class SeqSigNet(nn.Module):
         # combination method
         if comb_method=='concatenation':
             # input dimensions for FFN
-            input_dim = hidden_dim_lstm + self.embedding_dim + self.num_time_features
+            input_dim = hidden_dim_lstm + self.embedding_dim + self.num_features
         elif comb_method=='gated_addition':
-            input_gated_linear = hidden_dim_lstm + self.num_time_features
+            input_gated_linear = hidden_dim_lstm + self.num_features
             if self.embedding_dim > 0:
                 self.fc_scale = nn.Linear(input_gated_linear, self.embedding_dim)
                 self.scaler = torch.nn.Parameter(torch.zeros(1, self.embedding_dim))
@@ -143,12 +144,12 @@ class SeqSigNet(nn.Module):
             self.tanh = nn.Tanh()
         elif comb_method=='gated_concatenation':
             # input dimensions for FFN
-            input_dim = hidden_dim_lstm + self.embedding_dim + self.num_time_features
+            input_dim = hidden_dim_lstm + self.embedding_dim + self.num_features
             # define the scaler parameter
-            input_gated_linear = hidden_dim_lstm + self.num_time_features
+            input_gated_linear = hidden_dim_lstm + self.num_features
             self.scaler1 = torch.nn.Parameter(torch.zeros(1,input_gated_linear))
         elif comb_method=='scaled_concatenation':
-            input_dim = hidden_dim_lstm + self.embedding_dim + self.num_time_features
+            input_dim = hidden_dim_lstm + self.embedding_dim + self.num_features
             # define the scaler parameter
             self.scaler2 = torch.nn.Parameter(torch.tensor([0.0]))
         
@@ -188,16 +189,16 @@ class SeqSigNet(nn.Module):
         
         # Combine Time Features and Last Post Embedding
         if self.comb_method=='concatenation':
-            if self.num_time_features > 0:
+            if self.num_features > 0:
                 # concatenate any time features
-                out = torch.cat((out, x[:, :, self.input_channels:(self.input_channels+self.num_time_features), 0].max(1)[0]), dim=1)
+                out = torch.cat((out, x[:, :, self.input_channels:(self.input_channels+self.num_features), 0].max(1)[0]), dim=1)
             if self.embedding_dim > 0:
                 # concatenate current post embedding if provided
-                out = torch.cat((out, x[:,0,(self.input_channels+self.num_time_features):, 0]), dim=1)
+                out = torch.cat((out, x[:,0,(self.input_channels+self.num_features):, 0]), dim=1)
         elif self.comb_method=='gated_addition':
-            if self.num_time_features > 0:
+            if self.num_features > 0:
                 # concatenate any time features
-                out_gated = torch.cat((out, x[:, :, self.input_channels:(self.input_channels+self.num_time_features),0].max(1)[0]), dim=1)
+                out_gated = torch.cat((out, x[:, :, self.input_channels:(self.input_channels+self.num_features),0].max(1)[0]), dim=1)
             else:
                 out_gated = out
             out_gated = self.fc_scale(out_gated.float())
@@ -205,31 +206,31 @@ class SeqSigNet(nn.Module):
             out_gated = torch.mul(self.scaler, out_gated)
             if self.embedding_dim > 0:
                 # add current post embedding if provided
-                out = out_gated + x[:,0,(self.input_channels+self.num_time_features):, 0] 
+                out = out_gated + x[:,0,(self.input_channels+self.num_features):, 0] 
             else:
                 out = out_gated
         elif self.comb_method=='gated_concatenation':
-            if self.num_time_features > 0:
+            if self.num_features > 0:
                 # concatenate any time features
-                out_gated = torch.cat((out, x[:, :, self.input_channels:(self.input_channels+self.num_time_features), 0].max(1)[0]), dim=1)
+                out_gated = torch.cat((out, x[:, :, self.input_channels:(self.input_channels+self.num_features), 0].max(1)[0]), dim=1)
             else:
                 out_gated = out
             out_gated = torch.mul(self.scaler1, out_gated) 
             if self.embedding_dim > 0:
                 # add current post embedding if provided 
-                out = torch.cat((out_gated, x[:, 0, (self.input_channels+self.num_time_features):, 0]), dim=1 )
+                out = torch.cat((out_gated, x[:, 0, (self.input_channels+self.num_features):, 0]), dim=1 )
             else:
                 out = out_gated 
         elif self.comb_method=='scaled_concatenation':
-            if self.num_time_features > 0:
+            if self.num_features > 0:
                 # concatenate any time features
-                out_gated = torch.cat((out, x[:, :, self.input_channels:(self.input_channels+self.num_time_features), 0].max(1)[0]), dim=1)
+                out_gated = torch.cat((out, x[:, :, self.input_channels:(self.input_channels+self.num_features), 0].max(1)[0]), dim=1)
             else:
                 out_gated = out
             out_gated = self.scaler2 * out_gated  
             if self.embedding_dim > 0:
                 # add current post embedding if provided 
-                out = torch.cat((out_gated , x[:,0, (self.input_channels+self.num_time_features):, 0]) , dim=1 ) 
+                out = torch.cat((out_gated , x[:,0, (self.input_channels+self.num_features):, 0]) , dim=1 ) 
             else:
                 out = out_gated
         

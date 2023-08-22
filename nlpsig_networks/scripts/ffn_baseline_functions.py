@@ -24,6 +24,7 @@ def implement_ffn(
     seed: int,
     loss: str,
     gamma: float = 0.0,
+    device: str | None = None,
     batch_size: int = 64,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
@@ -132,6 +133,7 @@ def implement_ffn(
                            seed=seed,
                            loss=loss,
                            gamma=gamma,
+                           device=device,
                            batch_size=batch_size,
                            data_split_seed=data_split_seed,
                            split_ids=split_ids,
@@ -154,6 +156,7 @@ def ffn_hyperparameter_search(
     seeds : list[int],
     loss: str,
     gamma: float = 0.0,
+    device: str | None = None,
     batch_size: int = 64,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
@@ -256,6 +259,7 @@ def ffn_hyperparameter_search(
                                                seed=seed,
                                                loss=loss,
                                                gamma=gamma,
+                                               device=device,
                                                batch_size=batch_size,
                                                data_split_seed=data_split_seed,
                                                split_ids=split_ids,
@@ -320,6 +324,7 @@ def ffn_hyperparameter_search(
                                         seed=seed,
                                         loss=loss,
                                         gamma=gamma,
+                                        device=device,
                                         batch_size=batch_size,
                                         data_split_seed=data_split_seed,
                                         split_ids=split_ids,
@@ -380,7 +385,7 @@ def obtain_mean_history(df: pd.DataFrame,
                                label_column=label_column,
                                embeddings=embeddings)
     # obtain column names of the embeddings in paths.df
-    colnames = paths._obtain_colnames(embeddings="full")
+    colnames = paths._obtain_embedding_colnames(embeddings="full")
     
     # initialise empty array to store mean history
     mean_history = np.zeros((len(df.index), len(colnames)))
@@ -425,14 +430,14 @@ def obtain_signatures_history(method: str,
                               label_column: str,
                               embeddings: np.array,
                               seed: int = 42,
-                              path_indices : list | np.array | None = None,
+                              path_indices: list | np.array | None = None,
                               concatenate_current: bool = True) -> torch.tensor:
     # use nlpsig to construct the path as a numpy array
     # first define how we construct the path
     path_specifics = {"pad_by": "history",
                       "zero_padding": True,
                       "method": "max",
-                      "time_feature": None,
+                      "features": None,
                       "embeddings": "dim_reduced",
                       "include_current_embedding": True}
     
@@ -492,6 +497,7 @@ def histories_baseline_hyperparameter_search(
     seeds : list[int],
     loss: str,
     gamma: float = 0.0,
+    device: str | None = None,
     batch_size: int = 64,
     log_signature: bool = False,
     dim_reduce_methods: list[str] | None = None,
@@ -558,6 +564,7 @@ def histories_baseline_hyperparameter_search(
                     seeds=seeds,
                     loss=loss,
                     gamma=gamma,
+                    device=device,
                     batch_size=batch_size,
                     data_split_seed=data_split_seed,
                     split_ids=split_ids,
@@ -609,6 +616,7 @@ def histories_baseline_hyperparameter_search(
             seeds=seeds,
             loss=loss,
             gamma=gamma,
+            device=device,
             batch_size=batch_size,
             data_split_seed=data_split_seed,
             split_ids=split_ids,
@@ -672,6 +680,7 @@ def histories_baseline_hyperparameter_search(
                                         seed=seed,
                                         loss=loss,
                                         gamma=gamma,
+                                        device=device,
                                         batch_size=batch_size,
                                         data_split_seed=data_split_seed,
                                         split_ids=split_ids,

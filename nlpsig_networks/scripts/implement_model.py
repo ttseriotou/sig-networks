@@ -20,6 +20,7 @@ def implement_model(
     seed: int,
     loss: str,
     gamma: float = 0.0,
+    device: str | None = None,
     batch_size: int = 64,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
@@ -37,6 +38,20 @@ def implement_model(
     validation_metric = "f1"
     weight_decay_adam = 0.0001
     
+    if isinstance(device, str):
+        # set model to device is passed
+        model.to(device)
+        
+        # convert data to tensors if passed as numpy arrays
+        if isinstance(x_data, np.ndarray):
+            x_data = torch.from_numpy(x_data)
+        if isinstance(y_data, np.ndarray):
+            y_data = torch.from_numpy(y_data)
+        
+        # set data to device    
+        x_data = x_data.to(device)
+        y_data = y_data.to(device)
+
     if k_fold:
         # perform KFold evaluation and return the performance on validation and test sets
         # split dataset

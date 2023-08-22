@@ -20,7 +20,7 @@ def obtain_SWNUNetwork_input(
     label_column: str,
     embeddings: np.array,
     k: int,
-    time_feature: list[str] | str | None = None,
+    features: list[str] | str | None = None,
     standardise_method: list[str] | str | None = None,
     add_time_in_path: bool = False,
     seed: int = 42,
@@ -32,7 +32,7 @@ def obtain_SWNUNetwork_input(
                       "zero_padding": True,
                       "method": "k_last",
                       "k": k,
-                      "time_feature": time_feature,
+                      "features": features,
                       "standardise_method": standardise_method,
                       "embeddings": "dim_reduced",
                       "include_current_embedding": True}
@@ -62,8 +62,8 @@ def obtain_SWNUNetwork_input(
         paths.embeddings_reduced = paths.embeddings_reduced[path_indices]
     
     return paths.get_torch_path_for_SWNUNetwork(
-        include_time_features_in_path=add_time_in_path,
-        include_time_features_in_input=True,
+        include_features_in_path=add_time_in_path,
+        include_features_in_input=True,
         include_embedding_in_input=True,
         reduced_embeddings=False
     )
@@ -74,8 +74,7 @@ def implement_swnu_network(
     x_data: torch.tensor | np.array,
     y_data: torch.tensor | np.array,
     input_channels: int,
-    output_channels: int,
-    num_time_features: int,
+    num_features: int,
     embedding_dim: int,
     log_signature: bool,
     sig_depth: int,
@@ -88,7 +87,9 @@ def implement_swnu_network(
     seed: int,
     loss: str,
     gamma: float = 0.0,
+    device: str | None = None,
     batch_size: int = 64,
+    output_channels: int | None = None,
     augmentation_type: str = "Conv1d",
     hidden_dim_aug: list[int] | int | None = None,
     comb_method: str = "concatenation",
@@ -108,8 +109,7 @@ def implement_swnu_network(
     # initialise SWNUNetwork
     SWNUNetwork_args = {
         "input_channels": input_channels,
-        "output_channels": output_channels,
-        "num_time_features": num_time_features,
+        "num_features": num_features,
         "embedding_dim": embedding_dim,
         "log_signature": log_signature,
         "sig_depth": sig_depth,
@@ -117,6 +117,7 @@ def implement_swnu_network(
         "hidden_dim_ffn": ffn_hidden_dim,
         "output_dim": output_dim,
         "dropout_rate": dropout_rate,
+        "output_channels": output_channels,
         "augmentation_type": augmentation_type,
         "hidden_dim_aug": hidden_dim_aug,
         "BiLSTM": BiLSTM,
@@ -142,6 +143,7 @@ def implement_swnu_network(
                            seed=seed,
                            loss=loss,
                            gamma=gamma,
+                           device=device,
                            batch_size=batch_size,
                            data_split_seed=data_split_seed,
                            split_ids=split_ids,
@@ -166,7 +168,6 @@ def swnu_network_hyperparameter_search(
     dim_reduce_methods: list[str],
     dimensions: list[int],
     log_signature: bool,
-    conv_output_channels: list[int],
     swnu_hidden_dim_sizes_and_sig_depths: list[tuple[int, list[int] | list[list[int]]]],
     ffn_hidden_dim_sizes: list[int] | list[list[int]],
     dropout_rates: list[float],
@@ -175,10 +176,12 @@ def swnu_network_hyperparameter_search(
     seeds: list[int],
     loss: str,
     gamma: float = 0.0,
+    device: str | None = None,
     batch_size: int = 64,
-    time_feature: list[str] | str | None = None,
+    features: list[str] | str | None = None,
     standardise_method: list[str] | str | None = None,
     add_time_in_path: bool = False,
+    conv_output_channels: list[int] | None = None,
     augmentation_type: str = "Conv1d",
     hidden_dim_aug: list[int] | int | None = None,
     comb_method: str = "concatenation",
@@ -202,15 +205,18 @@ def swnu_network_hyperparameter_search(
                                     output=model_output,
                                     verbose=verbose)
 
-    if isinstance(time_feature, str):
-        time_feature = [time_feature]
-    elif time_feature is None:
-        time_feature = []
+    if isinstance(features, str):
+        features = [features]
+    elif features is None:
+        features = []
         
     if isinstance(standardise_method, str):
         standardise_method = [standardise_method]
     elif standardise_method is None:
         standardise_method = []
+    
+    if conv_output_channels is None:
+        conv_output_channels = [None]
     
     # find model parameters that has the best validation
     results_df = pd.DataFrame()
@@ -232,7 +238,7 @@ def swnu_network_hyperparameter_search(
                     label_column=label_column,
                     embeddings=embeddings,
                     k=k,
-                    time_feature=time_feature,
+                    features=features,
                     standardise_method=standardise_method,
                     add_time_in_path=add_time_in_path,
                     path_indices=path_indices
@@ -261,7 +267,7 @@ def swnu_network_hyperparameter_search(
                                             y_data=y_data,
                                             input_channels=input_channels,
                                             output_channels=output_channels,
-                                            num_time_features=len(time_feature),
+                                            num_features=len(features),
                                             embedding_dim=embedding_dim,
                                             log_signature=log_signature,
                                             sig_depth=sig_depth,
@@ -274,6 +280,7 @@ def swnu_network_hyperparameter_search(
                                             seed=seed,
                                             loss=loss,
                                             gamma=gamma,
+                                            device=device,
                                             batch_size=batch_size,
                                             augmentation_type=augmentation_type,
                                             hidden_dim_aug=hidden_dim_aug,
@@ -300,10 +307,10 @@ def swnu_network_hyperparameter_search(
                                         results["method"] = method
                                         results["input_channels"] = input_channels
                                         results["output_channels"] = output_channels
-                                        results["time_feature"] = [time_feature]
+                                        results["features"] = [features]
                                         results["standardise_method"] = [standardise_method]
                                         results["add_time_in_path"] = add_time_in_path
-                                        results["num_time_features"] = len(time_feature)
+                                        results["num_features"] = len(features)
                                         results["embedding_dim"] = embedding_dim
                                         results["log_signature"] = log_signature
                                         results["swnu_hidden_dim"] = [tuple(swnu_hidden_dim) for _ in range(len(results.index))]
@@ -342,10 +349,10 @@ def swnu_network_hyperparameter_search(
                                                         "method": method,
                                                         "input_channels": input_channels,
                                                         "output_channels": output_channels,
-                                                        "time_feature": time_feature,
+                                                        "features": features,
                                                         "standardise_method": standardise_method,
                                                         "add_time_in_path": add_time_in_path,
-                                                        "num_time_features": len(time_feature),
+                                                        "num_features": len(features),
                                                         "embedding_dim": embedding_dim,
                                                         "log_signature": log_signature,
                                                         "swnu_hidden_dim": swnu_hidden_dim,
@@ -372,7 +379,7 @@ def swnu_network_hyperparameter_search(
         label_column=label_column,
         embeddings=embeddings,
         k=checkpoint["extra_info"]["k"],
-        time_feature=checkpoint["extra_info"]["time_feature"],
+        features=checkpoint["extra_info"]["features"],
         standardise_method=checkpoint["extra_info"]["standardise_method"],
         add_time_in_path=checkpoint["extra_info"]["add_time_in_path"],
         path_indices=path_indices
@@ -388,7 +395,7 @@ def swnu_network_hyperparameter_search(
             sig_depth=checkpoint["extra_info"]["sig_depth"],
             input_channels=checkpoint["extra_info"]["input_channels"],
             output_channels=checkpoint["extra_info"]["output_channels"],
-            num_time_features=len(time_feature),
+            num_features=len(features),
             embedding_dim=embedding_dim,
             log_signature=checkpoint["extra_info"]["log_signature"],
             output_dim=output_dim,
@@ -400,6 +407,7 @@ def swnu_network_hyperparameter_search(
             seed=seed,
             loss=loss,
             gamma=gamma,
+            device=device,
             batch_size=batch_size,
             augmentation_type=checkpoint["extra_info"]["augmentation_type"],
             hidden_dim_aug = checkpoint["extra_info"]["hidden_dim_aug"],
@@ -427,10 +435,10 @@ def swnu_network_hyperparameter_search(
         test_results["method"] = checkpoint["extra_info"]["method"]
         test_results["input_channels"] = checkpoint["extra_info"]["input_channels"]
         test_results["output_channels"] = checkpoint["extra_info"]["output_channels"]
-        test_results["time_feature"] = [time_feature]
+        test_results["features"] = [features]
         test_results["standardise_method"] = [standardise_method]
         test_results["add_time_in_path"] = add_time_in_path
-        test_results["num_time_features"] = len(time_feature)
+        test_results["num_features"] = len(features)
         test_results["embedding_dim"] = embedding_dim
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
         test_results["swnu_hidden_dim"] = [tuple(checkpoint["extra_info"]["swnu_hidden_dim"])
@@ -461,6 +469,10 @@ def swnu_network_hyperparameter_search(
         print("saving results dataframe to CSV for this "
             f"hyperparameter search in {results_output}")
         results_df.to_csv(results_output)
+        best_results_output = results_output.replace(".csv", "_best_model.csv")
+        print("saving the best model results dataframe to CSV for this "
+              f"hyperparameter search in {best_results_output}")
+        test_results_df.to_csv(best_results_output)
     
     # remove any models that have been saved
     if os.path.exists(model_output):
