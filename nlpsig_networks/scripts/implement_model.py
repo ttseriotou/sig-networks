@@ -37,11 +37,6 @@ def implement_model(
     model_output = f"best_model_{_get_timestamp()}.pkl"
     validation_metric = "f1"
     weight_decay_adam = 0.0001
-    
-    print("before")
-    print(f"next(model.parameters()).is_cuda: {next(model.parameters()).is_cuda}")
-    print(f"x_data is on {x_data.get_device()}")
-    print(f"y_data is on {y_data.get_device()}")
         
     if device is not None:
         # set model to device is passed
@@ -56,11 +51,6 @@ def implement_model(
         # set data to device    
         x_data = x_data.to(device)
         y_data = y_data.to(device)
-        
-        print("after")
-        print(f"next(model.parameters()).is_cuda: {next(model.parameters()).is_cuda}")
-        print(f"x_data is on {x_data.get_device()}")
-        print(f"y_data is on {y_data.get_device()}")
 
     if k_fold:
         # perform KFold evaluation and return the performance on validation and test sets
