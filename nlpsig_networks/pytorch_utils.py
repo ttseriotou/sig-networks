@@ -289,7 +289,7 @@ def validation_pytorch(
             batch_inputs = batch[:-1]
             batch_labels = batch[-1]
             # make prediction with the inputs
-            model_output = model(batch_inputs)
+            model_output = model(*batch_inputs)
             _, batch_predictions = torch.max(model_output.data, 1)
             # compute loss
             total_loss += criterion(model_output, batch_labels).item()
@@ -431,7 +431,7 @@ def training_pytorch(
             batch_labels = batch[-1]
             # perform training by performing forward and backward passes
             optimizer.zero_grad()
-            model_output = model(batch_inputs)
+            model_output = model(*batch_inputs)
             loss = criterion(model_output, batch_labels)
             loss.backward()
             optimizer.step()
@@ -553,7 +553,7 @@ def testing_pytorch(
             batch_inputs = batch[:-1]
             batch_labels = batch[-1]
             # make prediction with the inputs
-            model_output = model(batch_inputs)
+            model_output = model(*batch_inputs)
             _, batch_predictions = torch.max(model_output.data, 1)
             # compute loss
             total_loss += criterion(model_output, batch_labels).item()
