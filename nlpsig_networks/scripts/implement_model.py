@@ -38,7 +38,7 @@ def implement_model(
     validation_metric = "f1"
     weight_decay_adam = 0.0001
     
-    if isinstance(device, str):
+    if device is not None:
         # set model to device is passed
         model.to(device)
         
