@@ -200,7 +200,7 @@ def lstm_hyperparameter_search(
     learning_rates: list[float],
     seeds : list[int],
     loss: str,
-    gamma: float = 0.0
+    gamma: float = 0.0,
     device: str | None = None,
     batch_size: int = 64,
     path_indices : list | np.array | None = None,
