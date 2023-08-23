@@ -151,14 +151,18 @@ class SWMHAUNetwork(nn.Module):
                                              output_dim=output_dim,
                                              dropout_rate=dropout_rate)
 
-    def forward(self, path: torch.Tensor, features: torch.Tensor = None):
+    def forward(
+        self,
+        path: torch.Tensor,
+        features: torch.Tensor | None = None
+    ):
         # x has dimensions [batch, length of signal, channels]
         # features has dimensions [batch, num_features+embedding_dim]
         # use SWMHAU to obtain feature set
         out = self.swmhau(path)
 
         if features is not None:
-            # combine with features
+            # combine with features provided
             if self.comb_method == "concatenation":
                 out = torch.cat((out, features), dim=1)
             else:
