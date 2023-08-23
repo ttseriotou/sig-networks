@@ -283,15 +283,19 @@ def validation_pytorch(
     labels = torch.empty((0), device=device)
     predicted = torch.empty((0), device=device)
     with torch.no_grad():
-        for emb_v, labels_v in valid_loader:
-            # make prediction
-            outputs = model(emb_v)
-            _, predicted_v = torch.max(outputs.data, 1)
+        # iterate through the validation dataloader
+        for batch in valid_loader:
+            # split the batch into inputs and labels
+            batch_inputs = batch[:-1]
+            batch_labels = batch[-1]
+            # make prediction with the inputs
+            model_output = model(batch_inputs)
+            _, batch_predictions = torch.max(model_output.data, 1)
             # compute loss
-            total_loss += criterion(outputs, labels_v).item()
+            total_loss += criterion(model_output, batch_labels).item()
             # save predictions and labels
-            labels = torch.cat([labels, labels_v])
-            predicted = torch.cat([predicted, predicted_v])
+            labels = torch.cat([labels, batch_labels])
+            predicted = torch.cat([predicted, batch_predictions])
         
         # compute accuracy
         accuracy = ((predicted == labels).sum() / len(labels)).item()
@@ -416,14 +420,19 @@ def training_pytorch(
         epochs_loop = tqdm(range(num_epochs))
     else:
         epochs_loop = range(num_epochs)
+        
     for epoch in epochs_loop:
-        for i, (emb, labels) in enumerate(train_loader):
+        # iterate through the training dataloader        
+        for batch in train_loader:
             # sets the model to training mode
             model.train()
+            # split the batch into inputs and labels
+            batch_inputs = batch[:-1]
+            batch_labels = batch[-1]
             # perform training by performing forward and backward passes
             optimizer.zero_grad()
-            outputs = model(emb)
-            loss = criterion(outputs, labels)
+            model_output = model(batch_inputs)
+            loss = criterion(model_output, batch_labels)
             loss.backward()
             optimizer.step()
 
@@ -538,16 +547,19 @@ def testing_pytorch(
     labels = torch.empty((0), device=device)
     predicted = torch.empty((0), device=device)
     with torch.no_grad():
-        # Iterate through test dataset
-        for emb_t, labels_t in test_loader:
-            # make prediction
-            outputs_t = model(emb_t)
-            _, predicted_t = torch.max(outputs_t.data, 1)
+        # iterate through the test dataloader
+        for batch in test_loader:
+            # split the batch into inputs and labels
+            batch_inputs = batch[:-1]
+            batch_labels = batch[-1]
+            # make prediction with the inputs
+            model_output = model(batch_inputs)
+            _, batch_predictions = torch.max(model_output.data, 1)
             # compute loss
-            total_loss += criterion(outputs_t, labels_t).item()
+            total_loss += criterion(model_output, batch_labels).item()
             # save predictions and labels
-            labels = torch.cat([labels, labels_t])
-            predicted = torch.cat([predicted, predicted_t])
+            labels = torch.cat([labels, batch_labels])
+            predicted = torch.cat([predicted, batch_predictions])
     
     # compute average loss
     avg_loss = total_loss / len(test_loader)
