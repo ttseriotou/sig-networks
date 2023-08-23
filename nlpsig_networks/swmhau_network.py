@@ -151,115 +151,49 @@ class SWMHAUNetwork(nn.Module):
                                              output_dim=output_dim,
                                              dropout_rate=dropout_rate)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, path: torch.Tensor, features: torch.Tensor = None):
         # x has dimensions [batch, length of signal, channels]
+        # features has dimensions [batch, num_features+embedding_dim]
         # use SWMHAU to obtain feature set
-        out = self.swmhau(x)
+        out = self.swmhau(path)
 
-        # combine last post embedding
-        if x.shape[2] > self.input_channels:
-            # we have things to concatenate to the path
+        if features is not None:
+            # combine with features
             if self.comb_method == "concatenation":
+                out = torch.cat((out, features), dim=1)
+            else:
+                # concatenate any additional features
                 if self.num_features > 0:
-                    # concatenate any time features
-                    # take the maximum for the latest time
-                    out = torch.cat(
-                        (
-                            out,
-                            x[
-                                :,
-                                :,
-                                self.input_channels : (
-                                    self.input_channels + self.num_features
-                                ),
-                            ].max(1)[0],
-                        ),
-                        dim=1,
-                    )
-                if self.embedding_dim > 0:
+                    out_gated = torch.cat((out, features[:, : self.num_features]), dim=1)
+                else:
+                    out_gated = out
+                
+                if self.comb_method == "gated_addition":
+                    # apply gated addition
+                    out_gated = self.fc_scale(out_gated.float())
+                    out_gated = self.tanh(out_gated)
+                    out_gated = torch.mul(self.scaler, out_gated)
+                    # element-wise addition of embedding vector if provided
+                    if self.embedding_dim > 0:
+                        out = out_gated + features[:, self.num_features :]
+                    else:
+                        out = out_gated
+                elif self.comb_method =="gated_concatenation":
+                    # apply gated concatenation
+                    out_gated = torch.mul(self.scaler1, out_gated) 
                     # concatenate current post embedding if provided
-                    out = torch.cat(
-                        (
-                            out,
-                            x[:, 0, (self.input_channels + self.num_features) :],
-                        ),
-                        dim=1,
-                    )
-            elif self.comb_method == "gated_addition":
-                if self.num_features > 0:
-                    # concatenate any time features
-                    out_gated = torch.cat(
-                        (
-                            out,
-                            x[
-                                :,
-                                :,
-                                self.input_channels : (
-                                    self.input_channels + self.num_features
-                                ),
-                            ].max(1)[0],
-                        ),
-                        dim=1,
-                    )
-                else:
-                    out_gated = out
-                out_gated = self.fc_scale(out_gated.float())
-                out_gated = self.tanh(out_gated)
-                out_gated = torch.mul(self.scaler, out_gated)
-                if self.embedding_dim > 0:
+                    if self.embedding_dim > 0:    
+                        out = torch.cat((out_gated, features[:, self.num_features :]), dim=1)
+                    else:
+                        out = out_gated
+                elif self.comb_method=="scaled_concatenation":
+                    # apply scaled concatenation
+                    out_gated = self.scaler2 * out_gated  
                     # concatenate current post embedding if provided
-                    out = out_gated + x[:, 0, (self.input_channels + self.num_features) :]
-                else:
-                    out = out_gated
-            elif self.comb_method =="gated_concatenation":
-                if self.num_features > 0:
-                    # concatenate any time features
-                    out_gated = torch.cat(
-                        (
-                            out,
-                            x[
-                                :,
-                                :,
-                                self.input_channels : (
-                                    self.input_channels + self.num_features
-                                ),
-                            ].max(1)[0],
-                        ),
-                        dim=1,
-                    )
-                else:
-                    out_gated = out
-                out_gated = torch.mul(self.scaler1, out_gated) 
-                if self.embedding_dim > 0:
-                    # add current post embedding if provided 
-                    out = torch.cat((out_gated, x[:, 0, (self.input_channels+self.num_features):]), dim=1 )
-                else:
-                    out = out_gated        
-            elif self.comb_method=="scaled_concatenation":
-                if self.num_features > 0:
-                    # concatenate any time features
-                    out_gated = torch.cat(
-                        (
-                            out,
-                            x[
-                                :,
-                                :,
-                                self.input_channels : (
-                                    self.input_channels + self.num_features
-                                ),
-                            ].max(1)[0],
-                        ),
-                        dim=1,
-                    )                
-                else:
-                    out_gated = out
-                out_gated = self.scaler2 * out_gated  
-                if self.embedding_dim > 0:
-                    # add current post embedding if provided 
-                    out = torch.cat((out_gated , x[:,0, (self.input_channels+self.num_features):]) , dim=1 ) 
-                else:
-                    out = out_gated
-
+                    if self.embedding_dim > 0:    
+                        out = torch.cat((out_gated, features[:, self.num_features :]), dim=1)
+                    else:
+                        out = out_gated
 
         # FFN
         out = self.ffn(out.float())
