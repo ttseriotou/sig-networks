@@ -177,7 +177,7 @@ class SeqSigNet(nn.Module):
         seq_lengths = torch.sum(torch.sum(torch.sum(x[:, :, :self.input_channels, :], 1) != 0, 1) != 0 , 1)
         seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
         out = out[perm_idx]
-        out = torch.nn.utils.rnn.pack_padded_sequence(out, seq_lengths, batch_first=True)
+        out = torch.nn.utils.rnn.pack_padded_sequence(out, seq_lengths.cpu(), batch_first=True)
         
         # BiLSTM that combines all deepsignet windows together
         _, (out, _) = self.lstm_sig(out)

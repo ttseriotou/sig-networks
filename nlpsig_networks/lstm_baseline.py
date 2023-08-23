@@ -61,7 +61,7 @@ class LSTMModel(nn.Module):
         # pack a tensor containing padded sequences of variable length
         x_pack = torch.nn.utils.rnn.pack_padded_sequence(
             x,
-            lengths=seq_lengths,
+            lengths=seq_lengths.cpu(),
             batch_first=True
         )
         
