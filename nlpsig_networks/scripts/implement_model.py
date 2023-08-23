@@ -27,21 +27,26 @@ def implement_model(
     split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,
     k_fold: bool = False,
     n_splits: int = 5,
-    patience: int = 10,
+    patience: int | None = 10,
     verbose_training: bool = True,
     verbose_results: bool = True,
 ):
     # set some variables for training
     return_best = True
-    early_stopping = True
+    early_stopping = patience is not None
     model_output = f"best_model_{_get_timestamp()}.pkl"
     validation_metric = "f1"
     weight_decay_adam = 0.0001
     
+    print("before")
+    print(f"next(model.parameters()).is_cuda: {next(model.parameters()).is_cuda}")
+    print(f"x_data is on {x_data.get_device()}")
+    print(f"y_data is on {y_data.get_device()}")
+        
     if device is not None:
         # set model to device is passed
         model.to(device)
-        
+
         # convert data to tensors if passed as numpy arrays
         if isinstance(x_data, np.ndarray):
             x_data = torch.from_numpy(x_data)
@@ -51,6 +56,11 @@ def implement_model(
         # set data to device    
         x_data = x_data.to(device)
         y_data = y_data.to(device)
+        
+        print("after")
+        print(f"next(model.parameters()).is_cuda: {next(model.parameters()).is_cuda}")
+        print(f"x_data is on {x_data.get_device()}")
+        print(f"y_data is on {y_data.get_device()}")
 
     if k_fold:
         # perform KFold evaluation and return the performance on validation and test sets
@@ -89,6 +99,7 @@ def implement_model(
                                 return_best=return_best,
                                 early_stopping=early_stopping,
                                 patience=patience,
+                                device=device,
                                 verbose=verbose_training)
     else:
         # split dataset
@@ -133,18 +144,21 @@ def implement_model(
                                  early_stopping=early_stopping,
                                  validation_metric=validation_metric,
                                  patience=patience,
+                                 device=device,
                                  verbose=verbose_training)
         
         # evaluate on validation
         valid_results = testing_pytorch(model=model,
                                         test_loader=valid,
                                         criterion=criterion,
+                                        device=device,
                                         verbose=False)
         
         # evaluate on test
         test_results = testing_pytorch(model=model,
                                        test_loader=test,
                                        criterion=criterion,
+                                       device=device,
                                        verbose=False)
         
         results = pd.DataFrame({"loss": test_results["loss"],

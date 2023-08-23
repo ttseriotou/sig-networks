@@ -245,6 +245,7 @@ def validation_pytorch(
     valid_loader: DataLoader,
     criterion: nn.Module,
     epoch: int,
+    device: str | None = None,
     verbose: bool = False,
     verbose_epoch: int = 100,
 ) -> dict[str, float | list[float]]:
@@ -279,8 +280,8 @@ def validation_pytorch(
     # sets the model to evaluation mode
     model.eval()
     total_loss = 0
-    labels = torch.empty((0), device=torch.device("cpu"))
-    predicted = torch.empty((0), device=torch.device("cpu"))
+    labels = torch.empty((0), device=device)
+    predicted = torch.empty((0), device=device)
     with torch.no_grad():
         for emb_v, labels_v in valid_loader:
             # make prediction
@@ -289,11 +290,15 @@ def validation_pytorch(
             # compute loss
             total_loss += criterion(outputs, labels_v).item()
             # save predictions and labels
-            labels = torch.cat([labels, labels_v.cpu()])
-            predicted = torch.cat([predicted, predicted_v.cpu()])
+            labels = torch.cat([labels, labels_v])
+            predicted = torch.cat([predicted, predicted_v])
         
         # compute accuracy
         accuracy = ((predicted == labels).sum() / len(labels)).item()
+        
+        # move labels and predicted to CPU to compute F1, precision, recall
+        labels = labels.to(torch.device("cpu"))
+        predicted = predicted.to(torch.device("cpu"))
         
         # compute F1 scores
         f1_scores = metrics.f1_score(labels, predicted, average=None, zero_division=0.0)
@@ -346,6 +351,7 @@ def training_pytorch(
     early_stopping: bool = False,
     validation_metric: str = "loss",
     patience: Optional[int] = 10,
+    device: str | None = None,
     verbose: bool = False,
     verbose_epoch: int = 100,
 ) -> nn.Module:
@@ -436,6 +442,7 @@ def training_pytorch(
                 valid_loader=valid_loader,
                 criterion=criterion,
                 epoch=epoch,
+                device=device,
                 verbose=verbose,
                 verbose_epoch=verbose_epoch,
             )
@@ -452,6 +459,7 @@ def training_pytorch(
                     valid_loader=train_loader,
                     criterion=criterion,
                     epoch=epoch,
+                    device=device,
                     verbose=False,
                 )
                 # save metric that we want to validate on
@@ -495,6 +503,7 @@ def testing_pytorch(
     model: nn.Module,
     test_loader: DataLoader,
     criterion: nn.Module,
+    device: str | None = None,
     verbose: bool = True,
 ) -> dict[str, torch.tensor | float | list[float]]:
     """
@@ -526,8 +535,8 @@ def testing_pytorch(
     # sets the model to evaluation mode
     model.eval()
     total_loss = 0
-    labels = torch.empty((0), device=torch.device("cpu"))
-    predicted = torch.empty((0), device=torch.device("cpu"))
+    labels = torch.empty((0), device=device)
+    predicted = torch.empty((0), device=device)
     with torch.no_grad():
         # Iterate through test dataset
         for emb_t, labels_t in test_loader:
@@ -537,13 +546,17 @@ def testing_pytorch(
             # compute loss
             total_loss += criterion(outputs_t, labels_t).item()
             # save predictions and labels
-            labels = torch.cat([labels, labels_t.cpu()])
-            predicted = torch.cat([predicted, predicted_t.cpu()])
+            labels = torch.cat([labels, labels_t])
+            predicted = torch.cat([predicted, predicted_t])
     
     # compute average loss
     avg_loss = total_loss / len(test_loader)
     # compute accuracy
     accuracy = ((predicted == labels).sum() / len(labels)).item()
+    
+    # move labels and predicted to CPU to compute F1, precision, recall
+    labels = labels.to(torch.device("cpu"))
+    predicted = predicted.to(torch.device("cpu"))
     
     # compute F1 scores
     f1_scores = metrics.f1_score(labels, predicted, average=None, zero_division=0.0)
@@ -595,6 +608,7 @@ def KFold_pytorch(
     return_best: bool = False,
     early_stopping: bool = False,
     patience: Optional[int] = 10,
+    device: str | None = None,
     verbose: bool = False,
     verbose_epoch: int = 100,
 ) -> pd.DataFrame:
@@ -675,6 +689,8 @@ def KFold_pytorch(
     valid_recall_scores = []
     
     # create empty torch tensors to record the predicted and labels
+    # place on CPU as the labels and predicted returned from testing_pytorch
+    # and validation_pytorch are tensors on CPU
     labels = torch.empty((0), device=torch.device("cpu"))
     predicted = torch.empty((0), device=torch.device("cpu"))
     valid_labels = torch.empty((0), device=torch.device("cpu"))
@@ -717,6 +733,7 @@ def KFold_pytorch(
             save_best=False,
             early_stopping=early_stopping,
             patience=patience,
+            device=device,
             verbose=verbose,
             verbose_epoch=verbose_epoch,
         )
@@ -725,6 +742,7 @@ def KFold_pytorch(
         test_results = testing_pytorch(model=model,
                                        test_loader=test,
                                        criterion=criterion,
+                                       device=device,
                                        verbose=verbose)
 
         # store the true labels and predicted labels for this fold
@@ -746,6 +764,7 @@ def KFold_pytorch(
             valid_results = testing_pytorch(model=model,
                                             test_loader=valid,
                                             criterion=criterion,
+                                            device=device,
                                             verbose=verbose)
             
             # store the true labels and predicted labels for this fold
