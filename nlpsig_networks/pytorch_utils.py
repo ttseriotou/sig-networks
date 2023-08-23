@@ -279,8 +279,8 @@ def validation_pytorch(
     # sets the model to evaluation mode
     model.eval()
     total_loss = 0
-    labels = torch.empty((0))
-    predicted = torch.empty((0))
+    labels = torch.empty((0), device=torch.device("cpu"))
+    predicted = torch.empty((0), device=torch.device("cpu"))
     with torch.no_grad():
         for emb_v, labels_v in valid_loader:
             # make prediction
@@ -289,8 +289,8 @@ def validation_pytorch(
             # compute loss
             total_loss += criterion(outputs, labels_v).item()
             # save predictions and labels
-            labels = torch.cat([labels, labels_v])
-            predicted = torch.cat([predicted, predicted_v])
+            labels = torch.cat([labels, labels_v.cpu()])
+            predicted = torch.cat([predicted, predicted_v.cpu()])
         
         # compute accuracy
         accuracy = ((predicted == labels).sum() / len(labels)).item()
@@ -526,8 +526,8 @@ def testing_pytorch(
     # sets the model to evaluation mode
     model.eval()
     total_loss = 0
-    labels = torch.empty((0))
-    predicted = torch.empty((0))
+    labels = torch.empty((0), device=torch.device("cpu"))
+    predicted = torch.empty((0), device=torch.device("cpu"))
     with torch.no_grad():
         # Iterate through test dataset
         for emb_t, labels_t in test_loader:
@@ -537,8 +537,8 @@ def testing_pytorch(
             # compute loss
             total_loss += criterion(outputs_t, labels_t).item()
             # save predictions and labels
-            labels = torch.cat([labels, labels_t])
-            predicted = torch.cat([predicted, predicted_t])
+            labels = torch.cat([labels, labels_t.cpu()])
+            predicted = torch.cat([predicted, predicted_t.cpu()])
     
     # compute average loss
     avg_loss = total_loss / len(test_loader)
@@ -675,10 +675,10 @@ def KFold_pytorch(
     valid_recall_scores = []
     
     # create empty torch tensors to record the predicted and labels
-    labels = torch.empty((0))
-    predicted = torch.empty((0))
-    valid_labels = torch.empty((0))
-    valid_predicted = torch.empty((0))
+    labels = torch.empty((0), device=torch.device("cpu"))
+    predicted = torch.empty((0), device=torch.device("cpu"))
+    valid_labels = torch.empty((0), device=torch.device("cpu"))
+    valid_predicted = torch.empty((0), device=torch.device("cpu"))
     
     # loop through folds to fit and evaluate
     fold_list = tqdm(range(folds.n_splits)) if verbose else range(folds.n_splits)
