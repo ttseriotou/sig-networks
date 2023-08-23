@@ -184,7 +184,7 @@ class SeqSigNet(nn.Module):
         out = out[-1, :, :] + out[-2, :, :]
         
         # reverse sequence padding
-        inverse_perm = np.argsort(perm_idx)
+        inverse_perm = torch.argsort(perm_idx)
         out = out[inverse_perm]
         
         # Combine Time Features and Last Post Embedding

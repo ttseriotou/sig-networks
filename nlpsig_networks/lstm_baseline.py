@@ -76,7 +76,7 @@ class LSTMModel(nn.Module):
             out = out_h[-1, :, :]
         
         # need to reverse the original indexing afterwards
-        inverse_perm = np.argsort(perm_idx)
+        inverse_perm = torch.argsort(perm_idx)
         out = out[inverse_perm]
 
         # readout

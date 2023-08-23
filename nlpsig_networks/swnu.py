@@ -109,7 +109,7 @@ class SWLSTM(nn.Module):
             
             #reverse soring of sequences
             x, _ = torch.nn.utils.rnn.pad_packed_sequence(x, batch_first=True)
-            inverse_perm = np.argsort(perm_idx)
+            inverse_perm = torch.argsort(perm_idx)
             x = x[inverse_perm]
             #case of last LSTM being Bidirectional
             if ((self.BiLSTM) & (l==(len(self.hidden_dim)-1))) :
