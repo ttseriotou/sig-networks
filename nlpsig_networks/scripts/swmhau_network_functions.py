@@ -124,7 +124,7 @@ def swmhau_network_hyperparameter_search(
     batch_size: int = 64,
     features: list[str] | str | None = None,
     standardise_method: list[str] | str | None = None,
-    add_time_in_path: bool = False,
+    include_features_in_path: bool = False,
     augmentation_type: str = "Conv1d",
     hidden_dim_aug: list[int] | int | None = None,
     comb_method: str = "concatenation",
@@ -181,7 +181,7 @@ def swmhau_network_hyperparameter_search(
                     k=k,
                     features=features,
                     standardise_method=standardise_method,
-                    add_time_in_path=add_time_in_path,
+                    include_features_in_path=include_features_in_path,
                     path_indices=path_indices
                 )
 
@@ -250,7 +250,7 @@ def swmhau_network_hyperparameter_search(
                                             results["output_channels"] = output_channels
                                             results["features"] = [features]
                                             results["standardise_method"] = [standardise_method]
-                                            results["add_time_in_path"] = add_time_in_path
+                                            results["include_features_in_path"] = include_features_in_path
                                             results["num_features"] = len(features)
                                             results["embedding_dim"] = embedding_dim
                                             results["log_signature"] = log_signature
@@ -292,7 +292,7 @@ def swmhau_network_hyperparameter_search(
                                                             "output_channels": output_channels,
                                                             "features": features,
                                                             "standardise_method": standardise_method,
-                                                            "add_time_in_path": add_time_in_path,
+                                                            "include_features_in_path": include_features_in_path,
                                                             "num_features": len(features),
                                                             "embedding_dim": embedding_dim,
                                                             "log_signature": log_signature,
@@ -322,7 +322,7 @@ def swmhau_network_hyperparameter_search(
         k=checkpoint["extra_info"]["k"],
         features=checkpoint["extra_info"]["features"],
         standardise_method=checkpoint["extra_info"]["standardise_method"],
-        add_time_in_path=checkpoint["extra_info"]["add_time_in_path"],
+        include_features_in_path=checkpoint["extra_info"]["include_features_in_path"],
         path_indices=path_indices
     )
 
@@ -378,7 +378,7 @@ def swmhau_network_hyperparameter_search(
         test_results["output_channels"] = checkpoint["extra_info"]["output_channels"]
         test_results["features"] = [features]
         test_results["standardise_method"] = [standardise_method]
-        test_results["add_time_in_path"] = add_time_in_path
+        test_results["include_features_in_path"] = include_features_in_path
         test_results["num_features"] = len(features)
         test_results["embedding_dim"] = embedding_dim
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
