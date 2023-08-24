@@ -2,6 +2,8 @@ from __future__ import annotations
 from signatory import Signature, LogSignature, signature_channels, logsignature_channels, Augment
 import torch
 import torch.nn as nn
+from nlpsig_networks.utils import obtain_signatures_mask
+
 
 class SWMHA(nn.Module):
     """
@@ -109,10 +111,8 @@ class SWMHA(nn.Module):
         for l in range(self.num_layers):
             # apply signature with lift layer
             x = self.signature_layers[l](x)
-            # obtain padding mask for the MHA layer (ignore zero vectors)
-            # create a binary mask (2d tensor with dimensions [batch, length_of_signal])
-            # where if a value is True, the corresponding value on the attention layer will be ignored
-            mask = torch.sum(x, 2) == 0
+            # obtain padding mask on the streamed signatures
+            mask = obtain_signatures_mask(x)
             # apply MHA layer to the signatures
             attention_out = self.mha_layers[l](x, x, x, key_padding_mask=mask)[0]
             # apply layer norm and residual connection
