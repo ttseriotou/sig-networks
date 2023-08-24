@@ -24,10 +24,10 @@ def obtain_SeqSigNet_input(
     n: int,
     features: list[str] | str | None = None,
     standardise_method: list[str] | str | None = None,
-    add_time_in_path: bool = False,
+    include_features_in_path: bool = False,
     seed: int = 42,
     path_indices : list | np.array | None = None
-) -> tuple[torch.tensor, int]:
+) -> dict[str, torch.tensor | int]:
     # compute length of path required 
     k = shift * n + (window_size - shift)
     print(f"given shift {shift}, window size {window_size} and n {n}: "
@@ -72,7 +72,7 @@ def obtain_SeqSigNet_input(
         shift=shift,
         window_size=window_size,
         n=n,
-        include_features_in_path=add_time_in_path,
+        include_features_in_path=include_features_in_path,
         include_features_in_input=True,
         include_embedding_in_input=True,
         reduced_embeddings=False
@@ -81,7 +81,7 @@ def obtain_SeqSigNet_input(
     
 def implement_seqsignet(
     num_epochs: int,
-    x_data: torch.tensor | np.array,
+    x_data: np.array | torch.Tensor | dict[str, np.array | torch.Tensor],
     y_data: torch.tensor | np.array,
     input_channels: int,
     num_features: int,
@@ -141,11 +141,18 @@ def implement_seqsignet(
         print(seqsignet_model)
     
     # convert data to torch tensors
-    if not isinstance(x_data, torch.Tensor):
-        x_data = torch.tensor(x_data)
+    # deal with case if x_data is a dictionary
+    if isinstance(x_data, dict):
+        # iterate through the values and check they are of the correct type
+        for key, value in x_data.items():
+            if not isinstance(value, torch.Tensor):
+                x_data[key] = torch.tensor(value).float()
+    else:
+        # convert data to torch tensors
+        if not isinstance(x_data, torch.Tensor):
+            x_data = torch.tensor(x_data).float()
     if not isinstance(y_data, torch.Tensor):
         y_data = torch.tensor(y_data)
-    x_data = x_data.float()
     
     return implement_model(model=seqsignet_model,
                            num_epochs=num_epochs,
@@ -174,7 +181,6 @@ def seqsignet_hyperparameter_search(
     label_column: str,
     embeddings: np.array,
     y_data: np.array,
-    embedding_dim: int,
     output_dim: int,
     shift: int,
     window_size: int,
@@ -195,7 +201,7 @@ def seqsignet_hyperparameter_search(
     batch_size: int = 64,
     features: list[str] | str | None = None,
     standardise_method: list[str] | str | None = None,
-    add_time_in_path: bool = False,
+    include_features_in_path: bool = False,
     conv_output_channels: list[int] | None = None,
     augmentation_type: str = "Conv1d",
     hidden_dim_aug: list[int] | int | None = None,
@@ -242,7 +248,7 @@ def seqsignet_hyperparameter_search(
             print("\n" + "#" * 50)
             print(f"dimension: {dimension} | "
                   f"method: {method}")
-            x_data, input_channels = obtain_SeqSigNet_input(
+            input = obtain_SeqSigNet_input(
                 method=method,
                 dimension=dimension,
                 df=df,
@@ -254,7 +260,7 @@ def seqsignet_hyperparameter_search(
                 n=n,
                 features=features,
                 standardise_method=standardise_method,
-                add_time_in_path= add_time_in_path,
+                include_features_in_path= include_features_in_path,
                 path_indices=path_indices
             )
     
@@ -279,12 +285,12 @@ def seqsignet_hyperparameter_search(
                                     for seed in seeds:
                                         _, results = implement_seqsignet(
                                             num_epochs=num_epochs,
-                                            x_data=x_data,
+                                            x_data=input["x_data"],
                                             y_data=y_data,
-                                            input_channels=input_channels,
+                                            input_channels=input["input_channels"],
                                             output_channels=output_channels,
-                                            num_features=len(features),
-                                            embedding_dim=embedding_dim,
+                                            embedding_dim=input["embedding_dim"],
+                                            num_features=input["num_features"],
                                             log_signature=log_signature,
                                             sig_depth=sig_depth,
                                             swnu_hidden_dim=swnu_hidden_dim,
@@ -325,13 +331,13 @@ def seqsignet_hyperparameter_search(
                                         results["dimensions"] = dimension
                                         results["sig_depth"] = sig_depth
                                         results["method"] = method
-                                        results["input_channels"] = input_channels
+                                        results["input_channels"] = input["input_channels"]
                                         results["output_channels"] = output_channels
                                         results["features"] = [features]
                                         results["standardise_method"] = [standardise_method]
-                                        results["add_time_in_path"] = add_time_in_path
-                                        results["num_features"] = len(features)
-                                        results["embedding_dim"] = embedding_dim
+                                        results["include_features_in_path"] = include_features_in_path
+                                        results["embedding_dim"] = input["embedding_dim"]
+                                        results["num_features"] = input["num_features"]
                                         results["log_signature"] = log_signature
                                         results["swnu_hidden_dim"] = [tuple(swnu_hidden_dim) for _ in range(len(results.index))]
                                         results["lstm_hidden_dim"] = lstm_hidden_dim
@@ -371,13 +377,13 @@ def seqsignet_hyperparameter_search(
                                                         "dimensions": dimension,
                                                         "sig_depth": sig_depth,
                                                         "method": method,
-                                                        "input_channels": input_channels,
+                                                        "input_channels": input["input_channels"],
                                                         "output_channels": output_channels,
                                                         "features": features,
                                                         "standardise_method": standardise_method,
-                                                        "add_time_in_path": add_time_in_path,
-                                                        "num_features": len(features),
-                                                        "embedding_dim": embedding_dim,
+                                                        "include_features_in_path": include_features_in_path,
+                                                        "embedding_dim": input["embedding_dim"],
+                                                        "num_features": input["num_features"],
                                                         "log_signature": log_signature,
                                                         "swnu_hidden_dim": swnu_hidden_dim,
                                                         "lstm_hidden_dim": lstm_hidden_dim,
@@ -396,7 +402,7 @@ def seqsignet_hyperparameter_search(
         print("The best model had the following parameters:")
         print(checkpoint["extra_info"])
 
-    x_data, input_channels = obtain_SeqSigNet_input(
+    input = obtain_SeqSigNet_input(
         method=checkpoint["extra_info"]["method"],
         dimension=checkpoint["extra_info"]["dimensions"],
         df=df,
@@ -408,7 +414,7 @@ def seqsignet_hyperparameter_search(
         n=checkpoint["extra_info"]["n"],
         features=checkpoint["extra_info"]["features"],
         standardise_method=checkpoint["extra_info"]["standardise_method"],
-        add_time_in_path=checkpoint["extra_info"]["add_time_in_path"],
+        include_features_in_path=checkpoint["extra_info"]["include_features_in_path"],
         path_indices=path_indices
     )
 
@@ -422,8 +428,8 @@ def seqsignet_hyperparameter_search(
             sig_depth=checkpoint["extra_info"]["sig_depth"],
             input_channels=checkpoint["extra_info"]["input_channels"],
             output_channels=checkpoint["extra_info"]["output_channels"],
-            num_features=len(features),
-            embedding_dim=embedding_dim,
+            embedding_dim=input["embedding_dim"],
+            num_features=input["num_features"],
             log_signature=checkpoint["extra_info"]["log_signature"],
             output_dim=output_dim,
             swnu_hidden_dim=checkpoint["extra_info"]["swnu_hidden_dim"],
@@ -467,9 +473,9 @@ def seqsignet_hyperparameter_search(
         test_results["output_channels"] = checkpoint["extra_info"]["output_channels"]
         test_results["features"] = [features]
         test_results["standardise_method"] = [standardise_method]
-        test_results["add_time_in_path"] = add_time_in_path
-        test_results["num_features"] = len(features)
-        test_results["embedding_dim"] = embedding_dim
+        test_results["include_features_in_path"] = include_features_in_path
+        test_results["embedding_dim"] = input["embedding_dim"]
+        test_results["num_features"] = input["num_features"]
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
         test_results["swnu_hidden_dim"] = [tuple(checkpoint["extra_info"]["swnu_hidden_dim"])
                                            for _ in range(len(test_results.index))]

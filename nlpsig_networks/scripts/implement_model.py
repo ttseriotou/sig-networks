@@ -14,7 +14,7 @@ import os
 def implement_model(
     model: nn.Module,
     num_epochs: int,
-    x_data: torch.tensor | np.array,
+    x_data: np.array | torch.Tensor | dict[str, np.array | torch.Tensor],
     y_data: torch.tensor | np.array,
     learning_rate: float,
     seed: int,
@@ -43,13 +43,27 @@ def implement_model(
         model.to(device)
 
         # convert data to tensors if passed as numpy arrays
+        # deal with case if x_data is a dictionary
+        if isinstance(x_data, dict):
+            # iterate through the values and check they are of the correct type
+            for key, value in x_data.items():
+                if isinstance(value, np.ndarray):
+                    x_data[key] = torch.from_numpy(value)
+                # set data to device
+                x_data[key] = x_data[key].to(device)
+        # deal with case if x_data is a numpy array
         if isinstance(x_data, np.ndarray):
             x_data = torch.from_numpy(x_data)
         if isinstance(y_data, np.ndarray):
             y_data = torch.from_numpy(y_data)
         
-        # set data to device    
-        x_data = x_data.to(device)
+        # set data to device
+        if isinstance(x_data, dict):
+            # iterate through the values and send to device
+            for key, value in x_data.items():
+                x_data[key] = x_data[key].to(device)
+        else:
+            x_data = x_data.to(device)
         y_data = y_data.to(device)
 
     if k_fold:

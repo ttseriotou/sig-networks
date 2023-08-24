@@ -5,12 +5,14 @@ import torch.nn as nn
 import numpy as np
 from nlpsig_networks.swnu import SWNU
 from nlpsig_networks.ffn_baseline import FeedforwardNeuralNetModel
+from nlpsig_networks.feature_concatenation import FeatureConcatenation
 
 
 class SeqSigNet(nn.Module):
     """
     BiLSTM of Deep Signature Neural Network Units for classification.
     """
+    
     def __init__(
         self, 
         input_channels: int, 
@@ -85,16 +87,6 @@ class SeqSigNet(nn.Module):
         super(SeqSigNet, self).__init__()
         
         self.input_channels = input_channels
-        
-        self.embedding_dim = embedding_dim
-        self.num_features = num_features
-        
-        if comb_method not in ["concatenation", "gated_addition", "gated_concatenation", "scaled_concatenation"]:
-            raise ValueError(
-                "`comb_method` must be either 'concatenation' or 'gated_addition' "
-                "or 'gated_concatenation' or 'scaled_concatenation'."
-            )
-        self.comb_method = comb_method
 
         self.swnu = SWNU(input_channels=input_channels,
                          output_channels=output_channels,
@@ -118,40 +110,23 @@ class SeqSigNet(nn.Module):
                 depth=sig_depth
             )
         
+        # BiLSTM that processes the outputs from SWNUs for each window
         self.lstm_sig = nn.LSTM(input_size=input_dim_lstmsig,
-                                 hidden_size=hidden_dim_lstm,
-                                 num_layers=1,
-                                 batch_first=True,
-                                 bidirectional=True)
+                                hidden_size=hidden_dim_lstm,
+                                num_layers=1,
+                                batch_first=True,
+                                bidirectional=True)
 
-        # combination method
-        if comb_method=='concatenation':
-            # input dimensions for FFN
-            input_dim = hidden_dim_lstm + self.embedding_dim + self.num_features
-        elif comb_method=='gated_addition':
-            input_gated_linear = hidden_dim_lstm + self.num_features
-            if self.embedding_dim > 0:
-                self.fc_scale = nn.Linear(input_gated_linear, self.embedding_dim)
-                self.scaler = torch.nn.Parameter(torch.zeros(1, self.embedding_dim))
-                #input dimensions for FFN
-                input_dim = self.embedding_dim
-            else:
-                self.fc_scale = nn.Linear(input_gated_linear, input_gated_linear)
-                self.scaler = torch.nn.Parameter(torch.zeros(1, input_gated_linear))
-                #input dimensions for FFN
-                input_dim = input_gated_linear
-            # non-linearity
-            self.tanh = nn.Tanh()
-        elif comb_method=='gated_concatenation':
-            # input dimensions for FFN
-            input_dim = hidden_dim_lstm + self.embedding_dim + self.num_features
-            # define the scaler parameter
-            input_gated_linear = hidden_dim_lstm + self.num_features
-            self.scaler1 = torch.nn.Parameter(torch.zeros(1,input_gated_linear))
-        elif comb_method=='scaled_concatenation':
-            input_dim = hidden_dim_lstm + self.embedding_dim + self.num_features
-            # define the scaler parameter
-            self.scaler2 = torch.nn.Parameter(torch.tensor([0.0]))
+        # determining how to concatenate features to the SWNU features
+        self.embedding_dim = embedding_dim
+        self.num_features = num_features
+        self.comb_method = comb_method
+        self.feature_concat = FeatureConcatenation(
+            input_dim=hidden_dim_lstm,
+            num_features=self.num_features,
+            embedding_dim=self.embedding_dim,
+            comb_method=self.comb_method,
+        )
         
         # FFN for classification
         # make sure hidden_dim_ffn a list of integers
@@ -159,22 +134,28 @@ class SeqSigNet(nn.Module):
             hidden_dim_ffn = [hidden_dim_ffn]
         self.hidden_dim_ffn = hidden_dim_ffn
         
-        self.ffn = FeedforwardNeuralNetModel(input_dim=input_dim,
+        self.ffn = FeedforwardNeuralNetModel(input_dim=self.feature_concat.output_dim,
                                              hidden_dim=self.hidden_dim_ffn,
                                              output_dim=output_dim,
                                              dropout_rate=dropout_rate)
 
-    def forward(self, x):       
+    def forward(
+        self,
+        path: torch.Tensor,
+        features: torch.Tensor | None = None
+    ):
+        # x has dimensions [batch, length of signal, channels]
+        # features has dimensions [batch, num_features+embedding_dim]
         # SWNU for each history window
-        out = self.swnu(x[:,:,: self.input_channels, 0])
+        out = self.swnu(path[:,:,: self.input_channels, 0])
         out = out.unsqueeze(1)
-        for window in range(1,x.shape[3]):
-            out_unit = self.swnu(x[:,:,: self.input_channels,window])
+        for window in range(1, path.shape[3]):
+            out_unit = self.swnu(path[:,:,: self.input_channels,window])
             out_unit = out_unit.unsqueeze(1)
             out = torch.cat((out, out_unit), dim=1)
         
         # order sequences based on sequence length of input
-        seq_lengths = torch.sum(torch.sum(torch.sum(x[:, :, :self.input_channels, :], 1) != 0, 1) != 0 , 1)
+        seq_lengths = torch.sum(torch.sum(torch.sum(path[:, :, :self.input_channels, :], 1) != 0, 1) != 0 , 1)
         seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
         out = out[perm_idx]
         out = torch.nn.utils.rnn.pack_padded_sequence(out, seq_lengths, batch_first=True)
@@ -187,52 +168,8 @@ class SeqSigNet(nn.Module):
         inverse_perm = np.argsort(perm_idx)
         out = out[inverse_perm]
         
-        # Combine Time Features and Last Post Embedding
-        if self.comb_method=='concatenation':
-            if self.num_features > 0:
-                # concatenate any time features
-                out = torch.cat((out, x[:, :, self.input_channels:(self.input_channels+self.num_features), 0].max(1)[0]), dim=1)
-            if self.embedding_dim > 0:
-                # concatenate current post embedding if provided
-                out = torch.cat((out, x[:,0,(self.input_channels+self.num_features):, 0]), dim=1)
-        elif self.comb_method=='gated_addition':
-            if self.num_features > 0:
-                # concatenate any time features
-                out_gated = torch.cat((out, x[:, :, self.input_channels:(self.input_channels+self.num_features),0].max(1)[0]), dim=1)
-            else:
-                out_gated = out
-            out_gated = self.fc_scale(out_gated.float())
-            out_gated = self.tanh(out_gated)
-            out_gated = torch.mul(self.scaler, out_gated)
-            if self.embedding_dim > 0:
-                # add current post embedding if provided
-                out = out_gated + x[:,0,(self.input_channels+self.num_features):, 0] 
-            else:
-                out = out_gated
-        elif self.comb_method=='gated_concatenation':
-            if self.num_features > 0:
-                # concatenate any time features
-                out_gated = torch.cat((out, x[:, :, self.input_channels:(self.input_channels+self.num_features), 0].max(1)[0]), dim=1)
-            else:
-                out_gated = out
-            out_gated = torch.mul(self.scaler1, out_gated) 
-            if self.embedding_dim > 0:
-                # add current post embedding if provided 
-                out = torch.cat((out_gated, x[:, 0, (self.input_channels+self.num_features):, 0]), dim=1 )
-            else:
-                out = out_gated 
-        elif self.comb_method=='scaled_concatenation':
-            if self.num_features > 0:
-                # concatenate any time features
-                out_gated = torch.cat((out, x[:, :, self.input_channels:(self.input_channels+self.num_features), 0].max(1)[0]), dim=1)
-            else:
-                out_gated = out
-            out_gated = self.scaler2 * out_gated  
-            if self.embedding_dim > 0:
-                # add current post embedding if provided 
-                out = torch.cat((out_gated , x[:,0, (self.input_channels+self.num_features):, 0]) , dim=1 ) 
-            else:
-                out = out_gated
+        # combine with features provided
+        out = self.feature_concat(out, features)
         
         # FFN
         out = self.ffn(out.float())
