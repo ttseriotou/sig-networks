@@ -70,7 +70,10 @@ def obtain_signatures_mask(signatures: torch.tensor) -> torch.tensor:
     # to make it the same length as the signatures tensor, add a column of False,
     # since we assume padding of the path was applied from below
     # and so we always need to attend to the first row of the signatures tensor
-    false_tensor = torch.full((signatures.shape[0], 1), False, dtype=torch.bool)
+    false_tensor = torch.full(size=(signatures.shape[0], 1),
+                              fill_value=False,
+                              dtype=torch.bool,
+                              device=equal_to_previous_row.device)
     
     # return bool tensor of dimension [batch, length]
     return torch.cat((false_tensor, equal_to_previous_row), dim=1)
