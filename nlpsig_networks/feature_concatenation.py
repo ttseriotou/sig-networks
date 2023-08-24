@@ -1,8 +1,6 @@
 from __future__ import annotations
 import torch
 import torch.nn as nn
-from nlpsig_networks.swmhau import SWMHAU
-from nlpsig_networks.ffn_baseline import FeedforwardNeuralNetModel
 
 
 class FeatureConcatenation(nn.Module):
