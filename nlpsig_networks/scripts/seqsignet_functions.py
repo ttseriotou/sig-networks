@@ -423,7 +423,7 @@ def seqsignet_hyperparameter_search(
     for seed in seeds:
         _, test_results = implement_seqsignet(
             num_epochs=num_epochs,
-            x_data=x_data,
+            x_data=input["x_data"],
             y_data=y_data,
             sig_depth=checkpoint["extra_info"]["sig_depth"],
             input_channels=checkpoint["extra_info"]["input_channels"],
