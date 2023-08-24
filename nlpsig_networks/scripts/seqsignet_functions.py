@@ -42,7 +42,8 @@ def obtain_SeqSigNet_input(
                       "features": features,
                       "standardise_method": standardise_method,
                       "embeddings": "dim_reduced",
-                      "include_current_embedding": True}
+                      "include_current_embedding": True,
+                      "pad_from_below": True}
     
     # first perform dimension reduction on embeddings
     if dimension == embeddings.shape[1]:
