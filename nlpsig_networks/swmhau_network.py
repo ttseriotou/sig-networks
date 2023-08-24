@@ -114,7 +114,7 @@ class SWMHAUNetwork(nn.Module):
         path: torch.Tensor,
         features: torch.Tensor | None = None
     ):
-        # x has dimensions [batch, length of signal, channels]
+        # path has dimensions [batch, length of signal, channels]
         # features has dimensions [batch, num_features+embedding_dim]
         # use SWMHAU to obtain feature set
         out = self.swmhau(path)

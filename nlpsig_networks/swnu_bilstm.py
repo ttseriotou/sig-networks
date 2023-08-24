@@ -144,18 +144,18 @@ class SeqSigNet(nn.Module):
         path: torch.Tensor,
         features: torch.Tensor | None = None
     ):
-        # x has dimensions [batch, length of signal, channels]
+        # path has dimensions [batch, units, history, channels]
         # features has dimensions [batch, num_features+embedding_dim]
         # SWNU for each history window
-        out = self.swnu(path[:,:,: self.input_channels, 0])
+        out = self.swnu(path[:,0,:,:])
         out = out.unsqueeze(1)
-        for window in range(1, path.shape[3]):
-            out_unit = self.swnu(path[:,:,: self.input_channels,window])
+        for window in range(1, path.shape[1]):
+            out_unit = self.swnu(path[:,window,:,:])
             out_unit = out_unit.unsqueeze(1)
             out = torch.cat((out, out_unit), dim=1)
         
         # order sequences based on sequence length of input
-        seq_lengths = torch.sum(torch.sum(torch.sum(path[:, :, :self.input_channels, :], 1) != 0, 1) != 0 , 1)
+        seq_lengths = torch.sum(torch.sum(torch.sum(path, 1) != 0, 1) != 0, 1)
         seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
         out = out[perm_idx]
         out = torch.nn.utils.rnn.pack_padded_sequence(out, seq_lengths.cpu(), batch_first=True)
