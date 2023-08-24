@@ -28,8 +28,8 @@ def implement_model(
     k_fold: bool = False,
     n_splits: int = 5,
     patience: int | None = 10,
-    verbose_training: bool = True,
-    verbose_results: bool = True,
+    verbose_training: bool = False,
+    verbose_results: bool = False,
 ):
     # set some variables for training
     return_best = True

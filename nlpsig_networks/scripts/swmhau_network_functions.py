@@ -43,8 +43,8 @@ def implement_swmhau_network(
     k_fold: bool = False,
     n_splits: int = 5,
     patience: int = 10,
-    verbose_training: bool = True,
-    verbose_results: bool = True,
+    verbose_training: bool = False,
+    verbose_results: bool = False,
     verbose_model: bool = False,
 ) -> tuple[SWMHAUNetwork, pd.DataFrame]:
     # set seed
