@@ -27,7 +27,7 @@ def obtain_SeqSigNet_input(
     include_features_in_path: bool = False,
     seed: int = 42,
     path_indices : list | np.array | None = None
-) -> dict[str, torch.tensor | int]:
+) -> dict[str, dict[str, torch.tensor] | int | None]:
     # compute length of path required 
     k = shift * n + (window_size - shift)
     print(f"given shift {shift}, window size {window_size} and n {n}: "
@@ -42,7 +42,8 @@ def obtain_SeqSigNet_input(
                       "features": features,
                       "standardise_method": standardise_method,
                       "embeddings": "dim_reduced",
-                      "include_current_embedding": True}
+                      "include_current_embedding": True,
+                      "pad_from_below": True}
     
     # first perform dimension reduction on embeddings
     if dimension == embeddings.shape[1]:
@@ -110,8 +111,8 @@ def implement_seqsignet(
     k_fold: bool = False,
     n_splits: int = 5,
     patience: int = 10,
-    verbose_training: bool = True,
-    verbose_results: bool = True,
+    verbose_training: bool = False,
+    verbose_results: bool = False,
     verbose_model: bool = False,
 ) -> tuple[SeqSigNet, pd.DataFrame]:
     # set seed

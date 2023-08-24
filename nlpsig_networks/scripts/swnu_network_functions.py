@@ -25,7 +25,7 @@ def obtain_SWNUNetwork_input(
     include_features_in_path: bool = False,
     seed: int = 42,
     path_indices : list | np.array | None = None
-) -> dict[str, torch.tensor | int]:
+) -> dict[str, dict[str, torch.tensor] | int | None]:
     # use nlpsig to construct the path as a numpy array
     # first define how we construct the path
     # i.e. padding by history for the last k posts,
@@ -40,7 +40,7 @@ def obtain_SWNUNetwork_input(
                       "standardise_method": standardise_method,
                       "embeddings": "dim_reduced",
                       "include_current_embedding": True,
-                      "pad_from_below": False}
+                      "pad_from_below": True}
     
     # first perform dimension reduction on embeddings
     if dimension == embeddings.shape[1]:
