@@ -61,7 +61,7 @@ class LSTMModel(nn.Module):
         # pack a tensor containing padded sequences of variable length
         x_pack = torch.nn.utils.rnn.pack_padded_sequence(
             x,
-            lengths=seq_lengths,
+            lengths=seq_lengths.cpu(),
             batch_first=True
         )
         
@@ -76,7 +76,7 @@ class LSTMModel(nn.Module):
             out = out_h[-1, :, :]
         
         # need to reverse the original indexing afterwards
-        inverse_perm = np.argsort(perm_idx)
+        inverse_perm = torch.argsort(perm_idx)
         out = out[inverse_perm]
 
         # readout

@@ -102,14 +102,14 @@ class SWLSTM(nn.Module):
 
             seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
             x = x[perm_idx]
-            x = torch.nn.utils.rnn.pack_padded_sequence(x, seq_lengths, batch_first=True)
+            x = torch.nn.utils.rnn.pack_padded_sequence(x, seq_lengths.cpu(), batch_first=True)
             
             #LSTM
             x, _ = self.lstm_layers[l](x)
             
             #reverse soring of sequences
             x, _ = torch.nn.utils.rnn.pad_packed_sequence(x, batch_first=True)
-            inverse_perm = np.argsort(perm_idx)
+            inverse_perm = torch.argsort(perm_idx)
             x = x[inverse_perm]
             #case of last LSTM being Bidirectional
             if ((self.BiLSTM) & (l==(len(self.hidden_dim)-1))) :
