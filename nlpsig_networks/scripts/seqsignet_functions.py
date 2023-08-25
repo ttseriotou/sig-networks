@@ -338,7 +338,7 @@ def seqsignet_hyperparameter_search(
                                         results["output_channels"] = output_channels
                                         results["features"] = [features]
                                         results["standardise_method"] = [standardise_method]
-                                        results["add_time_in_path"] = add_time_in_path
+                                        results["include_features_in_path"] = include_features_in_path
                                         results["num_features"] = input["num_features"]
                                         results["embedding_dim"] = input["embedding_dim"]
                                         results["log_signature"] = log_signature
@@ -384,7 +384,7 @@ def seqsignet_hyperparameter_search(
                                                         "output_channels": output_channels,
                                                         "features": features,
                                                         "standardise_method": standardise_method,
-                                                        "add_time_in_path": add_time_in_path,
+                                                        "include_features_in_path": include_features_in_path,
                                                         "embedding_dim": input["embedding_dim"],
                                                         "num_features": input["num_features"],
                                                         "log_signature": log_signature,
@@ -476,7 +476,7 @@ def seqsignet_hyperparameter_search(
         test_results["output_channels"] = checkpoint["extra_info"]["output_channels"]
         test_results["features"] = [features]
         test_results["standardise_method"] = [standardise_method]
-        test_results["add_time_in_path"] = add_time_in_path
+        test_results["include_features_in_path"] = include_features_in_path
         test_results["embedding_dim"] = input["embedding_dim"]
         test_results["num_features"] = input["num_features"]
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
