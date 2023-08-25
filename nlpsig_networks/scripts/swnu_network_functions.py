@@ -28,10 +28,6 @@ def obtain_SWNUNetwork_input(
 ) -> dict[str, torch.tensor | int]:
     # use nlpsig to construct the path as a numpy array
     # first define how we construct the path
-    # i.e. padding by history for the last k posts,
-    # include features and apply requested standardisation
-    # construct the path using dimension reduced embeddings 
-    # and include the currrent embedding in the path
     path_specifics = {"pad_by": "history",
                       "zero_padding": True,
                       "method": "k_last",
@@ -137,18 +133,8 @@ def implement_swnu_network(
         print(swnu_network_model)
     
     # convert data to torch tensors
-    # deal with case if x_data is a dictionary
-    if isinstance(x_data, dict):
-        # iterate through the values and check they are of the correct type
-        for key, value in x_data.items():
-            if not isinstance(value, torch.Tensor):
-                x_data[key] = torch.tensor(value)
-            x_data[key] = x_data[key].float()
-    else:
-        # convert data to torch tensors
-        if not isinstance(x_data, torch.Tensor):
-            x_data = torch.tensor(x_data).float()
-        x_data = x_data.float()
+    if not isinstance(x_data, torch.Tensor):
+        x_data = torch.tensor(x_data)
     if not isinstance(y_data, torch.Tensor):
         y_data = torch.tensor(y_data)
 
