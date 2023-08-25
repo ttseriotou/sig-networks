@@ -398,7 +398,7 @@ def swnu_network_hyperparameter_search(
             output_channels=checkpoint["extra_info"]["output_channels"],
             embedding_dim=input["embedding_dim"],
             num_features=input["num_features"],
-            log_signature=checkpoint["extra_info"]["log_signature"],
+            log_signature=log_signature,
             output_dim=output_dim,
             swnu_hidden_dim=checkpoint["extra_info"]["swnu_hidden_dim"],
             ffn_hidden_dim=checkpoint["extra_info"]["ffn_hidden_dim"],

@@ -651,7 +651,7 @@ def histories_baseline_hyperparameter_search(
         x_data = obtain_signatures_history(method=checkpoint["extra_info"]["method"],
                                            dimension=checkpoint["extra_info"]["dimension"],
                                            sig_depth=checkpoint["extra_info"]["sig_depth"],
-                                           log_signature=checkpoint["extra_info"]["log_signature"],
+                                           log_signature=log_signature,
                                            df=df,
                                            id_column=id_column,
                                            label_column=label_column,

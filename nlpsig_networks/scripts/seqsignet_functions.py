@@ -339,8 +339,8 @@ def seqsignet_hyperparameter_search(
                                         results["features"] = [features]
                                         results["standardise_method"] = [standardise_method]
                                         results["add_time_in_path"] = add_time_in_path
-                                        results["num_features"] = len(features)
-                                        results["embedding_dim"] = embedding_dim
+                                        results["num_features"] = input["num_features"]
+                                        results["embedding_dim"] = input["embedding_dim"]
                                         results["log_signature"] = log_signature
                                         results["swnu_hidden_dim"] = [tuple(swnu_hidden_dim) for _ in range(len(results.index))]
                                         results["lstm_hidden_dim"] = lstm_hidden_dim
@@ -385,8 +385,8 @@ def seqsignet_hyperparameter_search(
                                                         "features": features,
                                                         "standardise_method": standardise_method,
                                                         "add_time_in_path": add_time_in_path,
-                                                        "num_features": len(features),
-                                                        "embedding_dim": embedding_dim,
+                                                        "embedding_dim": input["embedding_dim"],
+                                                        "num_features": input["num_features"],
                                                         "log_signature": log_signature,
                                                         "swnu_hidden_dim": swnu_hidden_dim,
                                                         "lstm_hidden_dim": lstm_hidden_dim,
@@ -431,9 +431,9 @@ def seqsignet_hyperparameter_search(
             sig_depth=checkpoint["extra_info"]["sig_depth"],
             input_channels=checkpoint["extra_info"]["input_channels"],
             output_channels=checkpoint["extra_info"]["output_channels"],
-            embedding_dim=input["embedding_dim"],
             num_features=input["num_features"],
-            log_signature=checkpoint["extra_info"]["log_signature"],
+            embedding_dim=input["embedding_dim"],
+            log_signature=log_signature,
             output_dim=output_dim,
             swnu_hidden_dim=checkpoint["extra_info"]["swnu_hidden_dim"],
             lstm_hidden_dim=checkpoint["extra_info"]["lstm_hidden_dim"],
@@ -477,8 +477,8 @@ def seqsignet_hyperparameter_search(
         test_results["features"] = [features]
         test_results["standardise_method"] = [standardise_method]
         test_results["add_time_in_path"] = add_time_in_path
-        test_results["num_features"] = len(features)
-        test_results["embedding_dim"] = embedding_dim
+        test_results["embedding_dim"] = input["embedding_dim"]
+        test_results["num_features"] = input["num_features"]
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
         test_results["swnu_hidden_dim"] = [tuple(checkpoint["extra_info"]["swnu_hidden_dim"])
                                            for _ in range(len(test_results.index))]
