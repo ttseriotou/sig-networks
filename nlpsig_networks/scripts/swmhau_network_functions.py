@@ -78,11 +78,13 @@ def implement_swmhau_network(
         # iterate through the values and check they are of the correct type
         for key, value in x_data.items():
             if not isinstance(value, torch.Tensor):
-                x_data[key] = torch.tensor(value).float()
+                x_data[key] = torch.tensor(value)
+            x_data[key] = x_data[key].float()
     else:
         # convert data to torch tensors
         if not isinstance(x_data, torch.Tensor):
             x_data = torch.tensor(x_data).float()
+        x_data = x_data.float()
     if not isinstance(y_data, torch.Tensor):
         y_data = torch.tensor(y_data)
     

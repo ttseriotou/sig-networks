@@ -25,7 +25,7 @@ def obtain_SWNUNetwork_input(
     include_features_in_path: bool = False,
     seed: int = 42,
     path_indices : list | np.array | None = None
-) -> dict[str, dict[str, torch.tensor] | int | None]:
+) -> dict[str, torch.tensor | int]:
     # use nlpsig to construct the path as a numpy array
     # first define how we construct the path
     # i.e. padding by history for the last k posts,
@@ -142,11 +142,13 @@ def implement_swnu_network(
         # iterate through the values and check they are of the correct type
         for key, value in x_data.items():
             if not isinstance(value, torch.Tensor):
-                x_data[key] = torch.tensor(value).float()
+                x_data[key] = torch.tensor(value)
+            x_data[key] = x_data[key].float()
     else:
         # convert data to torch tensors
         if not isinstance(x_data, torch.Tensor):
             x_data = torch.tensor(x_data).float()
+        x_data = x_data.float()
     if not isinstance(y_data, torch.Tensor):
         y_data = torch.tensor(y_data)
 
@@ -306,7 +308,7 @@ def swnu_network_hyperparameter_search(
                                             n_splits=n_splits,
                                             patience=patience,
                                             verbose_results=verbose,
-                                            verbose_model=verbose
+                                            verbose_model=verbose_model
                                         )
                                         # save metric that we want to validate on
                                         # taking the mean over the performance on the folds for the seed

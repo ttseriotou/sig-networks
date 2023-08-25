@@ -37,6 +37,8 @@ class FeatureConcatenation(nn.Module):
             - gated_concatenation: concatenation of linearly gated path signature and embedding vector
             - scaled_concatenation: concatenation of single value scaled path signature and embedding vector
         """
+        super(FeatureConcatenation, self).__init__()
+        
         if comb_method not in ["concatenation", "gated_addition", "gated_concatenation", "scaled_concatenation"]:
             raise ValueError(
                 "`comb_method` must be either 'concatenation', 'gated_addition', 'gated_concatenation' or 'scaled_concatenation."
