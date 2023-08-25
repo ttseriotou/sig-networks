@@ -113,8 +113,8 @@ def implement_swnu_network(
     # initialise SWNUNetwork
     SWNUNetwork_args = {
         "input_channels": input_channels,
-        "num_features": num_features,
         "embedding_dim": embedding_dim,
+        "num_features": num_features,
         "log_signature": log_signature,
         "sig_depth": sig_depth,
         "hidden_dim_swnu": swnu_hidden_dim,

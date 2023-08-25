@@ -53,8 +53,8 @@ def implement_swmhau_network(
     # initialise SWMHAUNetwork
     SWMHAUNetwork_args = {
         "input_channels": input_channels,
-        "num_features": num_features,
         "embedding_dim": embedding_dim,
+        "num_features": num_features,
         "log_signature": log_signature,
         "sig_depth": sig_depth,
         "num_heads": num_heads,
