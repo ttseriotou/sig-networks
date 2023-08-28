@@ -24,7 +24,7 @@ def obtain_SWNUNetwork_input(
     standardise_method: list[str] | str | None = None,
     include_features_in_path: bool = False,
     seed: int = 42,
-    path_indices : list | np.array | None = None
+    path_indices: list | np.array | None = None
 ) -> dict[str, torch.tensor | int]:
     # use nlpsig to construct the path as a numpy array
     # first define how we construct the path
@@ -56,12 +56,6 @@ def obtain_SWNUNetwork_input(
                                embeddings_reduced=embeddings_reduced)
     paths.pad(**path_specifics)
     
-    # slice the path in specified way
-    if path_indices is not None:
-        paths.array_padded = paths.array_padded[path_indices]
-        paths.embeddings = paths.embeddings[path_indices]
-        paths.embeddings_reduced = paths.embeddings_reduced[path_indices]
-    
     # construct path for SWNUNetwork which is given as a dictionary with keys
     # "x_data", "input_channels" and "num_features"
     # include features and (full, not dimension reduced) embeddings in the FFN input
@@ -69,7 +63,8 @@ def obtain_SWNUNetwork_input(
         include_features_in_path=include_features_in_path,
         include_features_in_input=True,
         include_embedding_in_input=True,
-        reduced_embeddings=False
+        reduced_embeddings=False,
+        path_indices=path_indices,
     )
     
     
@@ -197,7 +192,7 @@ def swnu_network_hyperparameter_search(
     augmentation_type: str = "Conv1d",
     hidden_dim_aug: list[int] | int | None = None,
     comb_method: str = "concatenation",
-    path_indices : list | np.array | None = None,
+    path_indices: list | np.array | None = None,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
     split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,

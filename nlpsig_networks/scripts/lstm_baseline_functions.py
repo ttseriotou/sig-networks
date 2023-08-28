@@ -156,7 +156,7 @@ def obtain_path(df: pd.DataFrame,
                 label_column: str,
                 embeddings: np.array,
                 k: int,
-                path_indices : list | np.array | None = None) -> torch.tensor:
+                path_indices: list | np.array | None = None) -> torch.tensor:
     # use nlpsig to construct the path as a numpy array
     # first define how we construct the path
     path_specifics = {"pad_by": "history",
@@ -203,7 +203,7 @@ def lstm_hyperparameter_search(
     gamma: float = 0.0,
     device: str | None = None,
     batch_size: int = 64,
-    path_indices : list | np.array | None = None,
+    path_indices: list | np.array | None = None,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
     split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,

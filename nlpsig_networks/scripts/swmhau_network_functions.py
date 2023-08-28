@@ -136,7 +136,7 @@ def swmhau_network_hyperparameter_search(
     augmentation_type: str = "Conv1d",
     hidden_dim_aug: list[int] | int | None = None,
     comb_method: str = "concatenation",
-    path_indices : list | np.array | None = None,
+    path_indices: list | np.array | None = None,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
     split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,

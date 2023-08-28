@@ -26,7 +26,7 @@ def obtain_SeqSigNet_input(
     standardise_method: list[str] | str | None = None,
     include_features_in_path: bool = False,
     seed: int = 42,
-    path_indices : list | np.array | None = None
+    path_indices: list | np.array | None = None
 ) -> dict[str, dict[str, torch.tensor] | int | None]:
     # compute length of path required 
     k = shift * n + (window_size - shift)
@@ -63,12 +63,6 @@ def obtain_SeqSigNet_input(
                                embeddings_reduced=embeddings_reduced)
     paths.pad(**path_specifics)
     
-    # slice the path in specified way
-    if path_indices is not None:
-        paths.array_padded = paths.array_padded[path_indices]
-        paths.embeddings = paths.embeddings[path_indices]
-        paths.embeddings_reduced = paths.embeddings_reduced[path_indices]
-    
     return paths.get_torch_path_for_SeqSigNet(
         shift=shift,
         window_size=window_size,
@@ -76,7 +70,8 @@ def obtain_SeqSigNet_input(
         include_features_in_path=include_features_in_path,
         include_features_in_input=True,
         include_embedding_in_input=True,
-        reduced_embeddings=False
+        reduced_embeddings=False,
+        path_indices=path_indices,
     )
     
     
@@ -209,7 +204,7 @@ def seqsignet_hyperparameter_search(
     augmentation_type: str = "Conv1d",
     hidden_dim_aug: list[int] | int | None = None,
     comb_method: str = "concatenation",
-    path_indices : list | np.array | None = None,
+    path_indices: list | np.array | None = None,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
     split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,
