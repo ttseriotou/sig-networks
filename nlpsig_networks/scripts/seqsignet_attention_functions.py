@@ -1,18 +1,19 @@
 from __future__ import annotations
 
-import nlpsig
-from nlpsig_networks.pytorch_utils import _get_timestamp, SaveBestModel, set_seed
-from nlpsig_networks.seqsignet_attention import SeqSigNetAttention
-from nlpsig_networks.scripts.seqsignet_functions import obtain_SeqSigNet_input
-from nlpsig_networks.scripts.implement_model import implement_model
+import os
 from typing import Iterable
-import torch
+
 import numpy as np
 import pandas as pd
+import torch
 from tqdm.auto import tqdm
-import os
 
-    
+from nlpsig_networks.pytorch_utils import SaveBestModel, _get_timestamp, set_seed
+from nlpsig_networks.scripts.implement_model import implement_model
+from nlpsig_networks.scripts.seqsignet_functions import obtain_SeqSigNet_input
+from nlpsig_networks.seqsignet_attention import SeqSigNetAttention
+
+
 def implement_seqsignet_attention(
     num_epochs: int,
     x_data: np.array | torch.Tensor | dict[str, np.array | torch.Tensor],
@@ -39,7 +40,7 @@ def implement_seqsignet_attention(
     comb_method: str = "concatenation",
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
-    split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,
+    split_indices: tuple[Iterable[int] | None] | None = None,
     k_fold: bool = False,
     n_splits: int = 5,
     patience: int = 10,
@@ -49,7 +50,7 @@ def implement_seqsignet_attention(
 ) -> tuple[SeqSigNetAttention, pd.DataFrame]:
     # set seed
     set_seed(seed)
-    
+
     # initialise SeqSigNetAttention
     SeqSigNetAttention_args = {
         "input_channels": input_channels,
@@ -65,13 +66,13 @@ def implement_seqsignet_attention(
         "dropout_rate": dropout_rate,
         "augmentation_type": augmentation_type,
         "hidden_dim_aug": hidden_dim_aug,
-        "comb_method": comb_method
+        "comb_method": comb_method,
     }
     seqsignet_attention_model = SeqSigNetAttention(**SeqSigNetAttention_args)
-    
+
     if verbose_model:
         print(seqsignet_attention_model)
-    
+
     # convert data to torch tensors
     # deal with case if x_data is a dictionary
     if isinstance(x_data, dict):
@@ -87,25 +88,27 @@ def implement_seqsignet_attention(
         x_data = x_data.float()
     if not isinstance(y_data, torch.Tensor):
         y_data = torch.tensor(y_data)
-    
-    return implement_model(model=seqsignet_attention_model,
-                           num_epochs=num_epochs,
-                           x_data=x_data,
-                           y_data=y_data,
-                           learning_rate=learning_rate,
-                           seed=seed,
-                           loss=loss,
-                           gamma=gamma,
-                           device=device,
-                           batch_size=batch_size,
-                           data_split_seed=data_split_seed,
-                           split_ids=split_ids,
-                           split_indices=split_indices,
-                           k_fold=k_fold,
-                           n_splits=n_splits,
-                           patience=patience,
-                           verbose_training=verbose_training,
-                           verbose_results=verbose_results)
+
+    return implement_model(
+        model=seqsignet_attention_model,
+        num_epochs=num_epochs,
+        x_data=x_data,
+        y_data=y_data,
+        learning_rate=learning_rate,
+        seed=seed,
+        loss=loss,
+        gamma=gamma,
+        device=device,
+        batch_size=batch_size,
+        data_split_seed=data_split_seed,
+        split_ids=split_ids,
+        split_indices=split_indices,
+        k_fold=k_fold,
+        n_splits=n_splits,
+        patience=patience,
+        verbose_training=verbose_training,
+        verbose_results=verbose_results,
+    )
 
 
 def seqsignet_attention_hyperparameter_search(
@@ -127,7 +130,7 @@ def seqsignet_attention_hyperparameter_search(
     ffn_hidden_dim_sizes: list[int] | list[list[int]],
     dropout_rates: list[float],
     learning_rates: list[float],
-    seeds : list[int],
+    seeds: list[int],
     loss: str,
     gamma: float = 0.0,
     device: str | None = None,
@@ -141,33 +144,33 @@ def seqsignet_attention_hyperparameter_search(
     path_indices: list | np.array | None = None,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
-    split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,
+    split_indices: tuple[Iterable[int] | None] | None = None,
     k_fold: bool = False,
     n_splits: int = 5,
     patience: int = 10,
     validation_metric: str = "f1",
     results_output: str | None = None,
-    verbose: bool = True
+    verbose: bool = True,
 ):
     if validation_metric not in ["loss", "accuracy", "f1"]:
         raise ValueError("validation_metric must be either 'loss', 'accuracy' or 'f1'")
-    
+
     # initialise SaveBestModel class
     model_output = f"best_seqsignet_attention_model_{_get_timestamp()}.pkl"
-    save_best_model = SaveBestModel(metric=validation_metric,
-                                    output=model_output,
-                                    verbose=verbose)
+    save_best_model = SaveBestModel(
+        metric=validation_metric, output=model_output, verbose=verbose
+    )
 
     if isinstance(features, str):
         features = [features]
     elif features is None:
         features = []
-        
+
     if isinstance(standardise_method, str):
         standardise_method = [standardise_method]
     elif standardise_method is None:
         standardise_method = []
-    
+
     # find model parameters that has the best validation
     results_df = pd.DataFrame()
     model_id = 0
@@ -175,8 +178,7 @@ def seqsignet_attention_hyperparameter_search(
     for dimension in tqdm(dimensions):
         for method in tqdm(dim_reduce_methods):
             print("\n" + "#" * 50)
-            print(f"dimension: {dimension} | "
-                  f"method: {method}")
+            print(f"dimension: {dimension} | " f"method: {method}")
             input = obtain_SeqSigNet_input(
                 method=method,
                 dimension=dimension,
@@ -189,10 +191,10 @@ def seqsignet_attention_hyperparameter_search(
                 n=n,
                 features=features,
                 standardise_method=standardise_method,
-                include_features_in_path= include_features_in_path,
-                path_indices=path_indices
+                include_features_in_path=include_features_in_path,
+                path_indices=path_indices,
             )
-    
+
             for output_channels, sig_depth, num_heads in tqdm(swmhau_parameters):
                 for n_layers in tqdm(num_layers):
                     for ffn_hidden_dim in tqdm(ffn_hidden_dim_sizes):
@@ -200,13 +202,15 @@ def seqsignet_attention_hyperparameter_search(
                             for lr in tqdm(learning_rates):
                                 if verbose:
                                     print("\n" + "!" * 50)
-                                    print(f"output_channels: {output_channels} | "
-                                          f"ffn_hidden_dim: {ffn_hidden_dim} | "
-                                          f"sig_depth: {sig_depth} | "
-                                          f"num_heads: {num_heads} | "
-                                          f"dropout: {dropout} | "
-                                          f"learning_rate: {lr}")
-                                    
+                                    print(
+                                        f"output_channels: {output_channels} | "
+                                        f"ffn_hidden_dim: {ffn_hidden_dim} | "
+                                        f"sig_depth: {sig_depth} | "
+                                        f"num_heads: {num_heads} | "
+                                        f"dropout: {dropout} | "
+                                        f"learning_rate: {lr}"
+                                    )
+
                                 scores = []
                                 verbose_model = verbose
                                 for seed in seeds:
@@ -242,13 +246,15 @@ def seqsignet_attention_hyperparameter_search(
                                         patience=patience,
                                         verbose_training=False,
                                         verbose_results=verbose,
-                                        verbose_model=verbose_model
+                                        verbose_model=verbose_model,
                                     )
                                     # save metric that we want to validate on
-                                    # taking the mean over the performance on the folds for the seed
-                                    # if k_fold=False, .mean() just returns the performance for the seed
-                                    scores.append(results[f"valid_{validation_metric}"].mean())
-                                    
+                                    # take mean of performance on the folds
+                                    # if k_fold=False, return performance for seed
+                                    scores.append(
+                                        results[f"valid_{validation_metric}"].mean()
+                                    )
+
                                     # concatenate to results dataframe
                                     results["k"] = k
                                     results["shift"] = shift
@@ -261,13 +267,18 @@ def seqsignet_attention_hyperparameter_search(
                                     results["output_channels"] = output_channels
                                     results["features"] = [features]
                                     results["standardise_method"] = [standardise_method]
-                                    results["include_features_in_path"] = include_features_in_path
+                                    results[
+                                        "include_features_in_path"
+                                    ] = include_features_in_path
                                     results["embedding_dim"] = input["embedding_dim"]
                                     results["num_features"] = input["num_features"]
                                     results["log_signature"] = log_signature
                                     results["num_heads"] = num_heads
                                     results["num_layers"] = n_layers
-                                    results["ffn_hidden_dim"] = [tuple(ffn_hidden_dim) for _ in range(len(results.index))]
+                                    results["ffn_hidden_dim"] = [
+                                        tuple(ffn_hidden_dim)
+                                        for _ in range(len(results.index))
+                                    ]
                                     results["dropout_rate"] = dropout
                                     results["learning_rate"] = lr
                                     results["seed"] = seed
@@ -276,49 +287,63 @@ def seqsignet_attention_hyperparameter_search(
                                     results["k_fold"] = k_fold
                                     results["n_splits"] = n_splits if k_fold else None
                                     results["augmentation_type"] = augmentation_type
-                                    results["hidden_dim_aug"] = [tuple(hidden_dim_aug) for _ in range(len(results.index))] if hidden_dim_aug is not None else None
+                                    results["hidden_dim_aug"] = (
+                                        [
+                                            tuple(hidden_dim_aug)
+                                            for _ in range(len(results.index))
+                                        ]
+                                        if hidden_dim_aug is not None
+                                        else None
+                                    )
                                     results["comb_method"] = comb_method
                                     results["batch_size"] = batch_size
                                     results["model_id"] = model_id
                                     results_df = pd.concat([results_df, results])
-                                    
+
                                     # don't continue printing out the model
                                     verbose_model = False
 
                                 model_id += 1
-                                scores_mean = sum(scores)/len(scores)
-                                
+                                scores_mean = sum(scores) / len(scores)
+
                                 if verbose:
-                                    print(f"- average{' (kfold)' if k_fold else ''} "
-                                        f"(validation) metric score: {scores_mean}")
+                                    print(
+                                        f"- average{' (kfold)' if k_fold else ''} "
+                                        f"(validation) metric score: {scores_mean}"
+                                    )
                                     print(f"scores for the different seeds: {scores}")
-                                # save best model according to averaged metric over the different seeds
-                                save_best_model(current_valid_metric=scores_mean,
-                                                extra_info={
-                                                    "k": k,
-                                                    "shift": shift,
-                                                    "window_size": window_size,
-                                                    "n": n,
-                                                    "dimensions": dimension,
-                                                    "sig_depth": sig_depth,
-                                                    "method": method,
-                                                    "input_channels": input["input_channels"],
-                                                    "output_channels": output_channels,
-                                                    "features": features,
-                                                    "standardise_method": standardise_method,
-                                                    "include_features_in_path": include_features_in_path,
-                                                    "embedding_dim": input["embedding_dim"],
-                                                    "num_features": input["num_features"],
-                                                    "log_signature": log_signature,
-                                                    "num_heads": num_heads,
-                                                    "num_layers": n_layers,
-                                                    "ffn_hidden_dim": ffn_hidden_dim,
-                                                    "dropout_rate": dropout,
-                                                    "learning_rate": lr,
-                                                    "augmentation_type": augmentation_type,
-                                                    "hidden_dim_aug": hidden_dim_aug,
-                                                    "comb_method": comb_method,
-                                                })
+                                # save best model according to averaged metric
+                                # over the different seeds
+                                save_best_model(
+                                    current_valid_metric=scores_mean,
+                                    extra_info={
+                                        "k": k,
+                                        "shift": shift,
+                                        "window_size": window_size,
+                                        "n": n,
+                                        "dimensions": dimension,
+                                        "sig_depth": sig_depth,
+                                        "method": method,
+                                        "input_channels": input["input_channels"],
+                                        "output_channels": output_channels,
+                                        "features": features,
+                                        "standardise_method": standardise_method,
+                                        "include_features_in_path": (
+                                            include_features_in_path
+                                        ),
+                                        "embedding_dim": input["embedding_dim"],
+                                        "num_features": input["num_features"],
+                                        "log_signature": log_signature,
+                                        "num_heads": num_heads,
+                                        "num_layers": n_layers,
+                                        "ffn_hidden_dim": ffn_hidden_dim,
+                                        "dropout_rate": dropout,
+                                        "learning_rate": lr,
+                                        "augmentation_type": augmentation_type,
+                                        "hidden_dim_aug": hidden_dim_aug,
+                                        "comb_method": comb_method,
+                                    },
+                                )
 
     checkpoint = torch.load(f=model_output)
     if verbose:
@@ -339,7 +364,7 @@ def seqsignet_attention_hyperparameter_search(
         features=checkpoint["extra_info"]["features"],
         standardise_method=checkpoint["extra_info"]["standardise_method"],
         include_features_in_path=checkpoint["extra_info"]["include_features_in_path"],
-        path_indices=path_indices
+        path_indices=path_indices,
     )
 
     test_scores = []
@@ -366,7 +391,7 @@ def seqsignet_attention_hyperparameter_search(
             gamma=gamma,
             batch_size=batch_size,
             augmentation_type=checkpoint["extra_info"]["augmentation_type"],
-            hidden_dim_aug = checkpoint["extra_info"]["hidden_dim_aug"],
+            hidden_dim_aug=checkpoint["extra_info"]["hidden_dim_aug"],
             comb_method=checkpoint["extra_info"]["comb_method"],
             data_split_seed=data_split_seed,
             split_ids=split_ids,
@@ -376,14 +401,14 @@ def seqsignet_attention_hyperparameter_search(
             patience=patience,
             verbose_training=False,
             verbose_results=False,
-            verbose_model=False
+            verbose_model=False,
         )
 
         # save metric that we want to validate on
-        # taking the mean over the performance on the folds for the seed
-        # if k_fold=False, .mean() just returns the performance for the seed
+        # take mean of performance on the folds
+        # if k_fold=False, return performance for seed
         test_scores.append(test_results[validation_metric].mean())
-        
+
         # concatenate to results dataframe
         test_results["k"] = checkpoint["extra_info"]["k"]
         test_results["shift"] = checkpoint["extra_info"]["shift"]
@@ -402,8 +427,10 @@ def seqsignet_attention_hyperparameter_search(
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
         test_results["num_heads"] = checkpoint["extra_info"]["num_heads"]
         test_results["num_layers"] = checkpoint["extra_info"]["num_layers"]
-        test_results["ffn_hidden_dim"] = [tuple(checkpoint["extra_info"]["ffn_hidden_dim"])
-                                          for _ in range(len(test_results.index))]
+        test_results["ffn_hidden_dim"] = [
+            tuple(checkpoint["extra_info"]["ffn_hidden_dim"])
+            for _ in range(len(test_results.index))
+        ]
         test_results["dropout_rate"] = checkpoint["extra_info"]["dropout_rate"]
         test_results["learning_rate"] = checkpoint["extra_info"]["learning_rate"]
         test_results["seed"] = seed
@@ -411,30 +438,47 @@ def seqsignet_attention_hyperparameter_search(
         test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
         test_results["n_splits"] = n_splits if k_fold else None
-        test_results["augmentation_type"] = checkpoint["extra_info"]["augmentation_type"]
-        test_results["hidden_dim_aug"] = [tuple(checkpoint["extra_info"]["hidden_dim_aug"])
-                                           for _ in range(len(test_results.index))] if checkpoint["extra_info"]["hidden_dim_aug"] is not None else None
+        test_results["augmentation_type"] = checkpoint["extra_info"][
+            "augmentation_type"
+        ]
+        test_results["hidden_dim_aug"] = (
+            [
+                tuple(checkpoint["extra_info"]["hidden_dim_aug"])
+                for _ in range(len(test_results.index))
+            ]
+            if checkpoint["extra_info"]["hidden_dim_aug"] is not None
+            else None
+        )
         test_results["comb_method"] = checkpoint["extra_info"]["comb_method"]
         test_results["batch_size"] = batch_size
         test_results_df = pd.concat([test_results_df, test_results])
-        
-    test_scores_mean = sum(test_scores)/len(test_scores)
+
+    test_scores_mean = sum(test_scores) / len(test_scores)
     if verbose:
         print(f"best validation score: {save_best_model.best_valid_metric}")
         print(f"- Best model: average (test) metric score: {test_scores_mean}")
         print(f"scores for the different seeds: {test_scores}")
-        
+
     if results_output is not None:
-        print("saving results dataframe to CSV for this "
-            f"hyperparameter search in {results_output}")
+        print(
+            "saving results dataframe to CSV for this "
+            f"hyperparameter search in {results_output}"
+        )
         results_df.to_csv(results_output)
         best_results_output = results_output.replace(".csv", "_best_model.csv")
-        print("saving the best model results dataframe to CSV for this "
-              f"hyperparameter search in {best_results_output}")
+        print(
+            "saving the best model results dataframe to CSV for this "
+            f"hyperparameter search in {best_results_output}"
+        )
         test_results_df.to_csv(best_results_output)
-    
+
     # remove any models that have been saved
     if os.path.exists(model_output):
         os.remove(model_output)
-    
-    return results_df, test_results_df, save_best_model.best_valid_metric, checkpoint["extra_info"]
+
+    return (
+        results_df,
+        test_results_df,
+        save_best_model.best_valid_metric,
+        checkpoint["extra_info"],
+    )

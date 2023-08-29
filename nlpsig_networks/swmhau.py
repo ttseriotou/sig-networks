@@ -1,7 +1,15 @@
 from __future__ import annotations
-from signatory import Signature, LogSignature, signature_channels, logsignature_channels, Augment
+
 import torch
 import torch.nn as nn
+from signatory import (
+    Augment,
+    LogSignature,
+    Signature,
+    logsignature_channels,
+    signature_channels,
+)
+
 from nlpsig_networks.utils import obtain_signatures_mask
 
 
@@ -9,7 +17,7 @@ class SWMHA(nn.Module):
     """
     Signature Window using Multihead Attention (SWMHA).
     """
-    
+
     def __init__(
         self,
         input_size: int,
@@ -36,101 +44,118 @@ class SWMHA(nn.Module):
             The number of layers in the SWMHAU.
         """
         super(SWMHA, self).__init__()
-        
+
         self.signature_terms = None
         # check if the parameters are compatible with each other
         # set the number of signature terms from the input size and signature depth
-        self._check_signature_terms_divisible_num_heads(input_size=input_size,
-                                                        log_signature=log_signature,
-                                                        sig_depth=sig_depth,
-                                                        num_heads=num_heads)
-        
+        self._check_signature_terms_divisible_num_heads(
+            input_size=input_size,
+            log_signature=log_signature,
+            sig_depth=sig_depth,
+            num_heads=num_heads,
+        )
+
         # logging inputs to the class
         self.input_size = input_size
         self.log_signature = log_signature
         self.sig_depth = sig_depth
         self.num_heads = num_heads
         self.num_layers = num_layers
-        
+
         # create signature layers
         if self.log_signature:
             self.signature_layers = nn.ModuleList(
-                [LogSignature(depth=sig_depth, stream=True) for _ in range(self.num_layers)]
+                [
+                    LogSignature(depth=sig_depth, stream=True)
+                    for _ in range(self.num_layers)
+                ]
             )
         else:
             self.signature_layers = nn.ModuleList(
-                [Signature(depth=sig_depth, stream=True) for _ in range(self.num_layers)]
+                [
+                    Signature(depth=sig_depth, stream=True)
+                    for _ in range(self.num_layers)
+                ]
             )
-            
+
         # create Multihead Attention layers
         self.mha_layers = nn.ModuleList(
-            [nn.MultiheadAttention(
-                embed_dim=self.signature_terms,
-                num_heads=self.num_heads,
-                batch_first=True
-            ) for _ in range(self.num_layers)]
+            [
+                nn.MultiheadAttention(
+                    embed_dim=self.signature_terms,
+                    num_heads=self.num_heads,
+                    batch_first=True,
+                )
+                for _ in range(self.num_layers)
+            ]
         )
-        
-        # create linear layers to project the output of the MHA layers down to original input size
+
+        # create linear layers to project the output of
+        # the MHA layers down to original input size
         self.linear_layers = nn.ModuleList(
-            [nn.Linear(self.signature_terms, self.input_size) for _ in range(self.num_layers)]
+            [
+                nn.Linear(self.signature_terms, self.input_size)
+                for _ in range(self.num_layers)
+            ]
         )
 
         # layer norm
         self.norm = nn.LayerNorm(self.signature_terms)
-        
+
         # final signature without lift (i.e. no expanding windows)
         if self.log_signature:
             self.signature2 = LogSignature(depth=sig_depth, stream=False)
         else:
             self.signature2 = Signature(depth=sig_depth, stream=False)
-        
-    def _check_signature_terms_divisible_num_heads(self,
-                                                   input_size: int,
-                                                   log_signature: bool,
-                                                   sig_depth: int,
-                                                   num_heads: int):
+
+    def _check_signature_terms_divisible_num_heads(
+        self, input_size: int, log_signature: bool, sig_depth: int, num_heads: int
+    ):
         # check that the signature terms are divisible by the number of heads
         # compute the output size of the signature
         if log_signature:
-            self.signature_terms = logsignature_channels(in_channels=input_size,
-                                                         depth=sig_depth)
+            self.signature_terms = logsignature_channels(
+                in_channels=input_size, depth=sig_depth
+            )
         else:
-            self.signature_terms = signature_channels(channels=input_size,
-                                                      depth=sig_depth)
-            
+            self.signature_terms = signature_channels(
+                channels=input_size, depth=sig_depth
+            )
+
         # check that the output size is divisible by the number of heads
         if self.signature_terms % num_heads != 0:
-            raise ValueError(f"Output size of the signature ({self.signature_terms}) not "
-                             f"divisible by number of heads ({num_heads}).")
-        
+            raise ValueError(
+                f"Output size of the signature ({self.signature_terms}) not "
+                f"divisible by number of heads ({num_heads})."
+            )
+
     def forward(self, x: torch.Tensor):
         # x has dimensions [batch, length of signal, channels]
-        
+
         # take signature lifts and lstm
-        for l in range(self.num_layers):
+        for layer in range(self.num_layers):
             # apply signature with lift layer
-            x = self.signature_layers[l](x)
+            x = self.signature_layers[layer](x)
             # obtain padding mask on the streamed signatures
             mask = obtain_signatures_mask(x)
             # apply MHA layer to the signatures
-            attention_out = self.mha_layers[l](x, x, x, key_padding_mask=mask)[0]
+            attention_out = self.mha_layers[layer](x, x, x, key_padding_mask=mask)[0]
             # apply layer norm and residual connection
             x = self.norm(x + attention_out)
             # apply linear layer
-            x = self.linear_layers[l](x)
+            x = self.linear_layers[layer](x)
 
         # take final signature
         out = self.signature2(x)
-        
+
         return out
-    
-    
+
+
 class SWMHAU(nn.Module):
     """
     Signature Window using Multihead Attention Unit (SWMHAU).
     """
-    
+
     def __init__(
         self,
         input_channels: int,
@@ -177,50 +202,52 @@ class SWMHAU(nn.Module):
         self.sig_depth = sig_depth
         self.num_heads = num_heads
         self.num_layers = num_layers
-            
+
         if augmentation_type not in ["Conv1d", "signatory"]:
             raise ValueError("`augmentation_type` must be 'Conv1d' or 'signatory'.")
         self.augmentation_type = augmentation_type
-        
+
         if isinstance(hidden_dim_aug, int):
             hidden_dim_aug = [hidden_dim_aug]
         elif hidden_dim_aug is None:
             hidden_dim_aug = []
         self.hidden_dim_aug = hidden_dim_aug
-        
+
         # convolution
         self.conv = nn.Conv1d(
             in_channels=self.input_channels,
             out_channels=self.output_channels,
             kernel_size=3,
-            stride=1, 
+            stride=1,
             padding=1,
         )
-        
-        # alternative to convolution: using Augment from signatory 
+
+        # alternative to convolution: using Augment from signatory
         self.augment = Augment(
             in_channels=self.input_channels,
             layer_sizes=self.hidden_dim_aug + [self.output_channels],
             include_original=False,
             include_time=False,
             kernel_size=3,
-            stride=1, 
+            stride=1,
             padding=1,
         )
-        
+
         # non-linearity
         self.tanh = nn.Tanh()
-        
+
         # signature window & Multihead Attention blocks
-        self.swmha = SWMHA(input_size=self.output_channels,
-                           log_signature=self.log_signature,
-                           sig_depth=self.sig_depth,
-                           num_heads=self.num_heads,
-                           num_layers=self.num_layers)
-        
+        self.swmha = SWMHA(
+            input_size=self.output_channels,
+            log_signature=self.log_signature,
+            sig_depth=self.sig_depth,
+            num_heads=self.num_heads,
+            num_layers=self.num_layers,
+        )
+
     def forward(self, x: torch.Tensor):
         # x has dimensions [batch, length of signal, channels]
-        
+
         # convolution
         if self.augmentation_type == "Conv1d":
             # input has dimensions [batch, length of signal, channels]
@@ -240,5 +267,5 @@ class SWMHAU(nn.Module):
             out = self.augment(x[:, :, : self.input_channels])
 
         out = self.swmha(out)
-        
+
         return out

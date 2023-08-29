@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 import torch
 import torch.nn as nn
-from nlpsig_networks.swmhau import SWMHAU
-from nlpsig_networks.ffn_baseline import FeedforwardNeuralNetModel
+
 from nlpsig_networks.feature_concatenation import FeatureConcatenation
+from nlpsig_networks.ffn_baseline import FeedforwardNeuralNetModel
+from nlpsig_networks.swmhau import SWMHAU
 
 
 class SWMHAUNetwork(nn.Module):
@@ -29,7 +31,8 @@ class SWMHAUNetwork(nn.Module):
         comb_method: str = "concatenation",
     ):
         """
-        Signature Window using Multihead Attention Unit (SWMHAU) network for classification.
+        Signature Window using Multihead Attention Unit (SWMHAU)
+        network for classification.
 
         Parameters
         ----------
@@ -69,21 +72,26 @@ class SWMHAUNetwork(nn.Module):
             by default "gated_addition".
             Options are:
             - concatenation: concatenation of path signature and embedding vector
-            - gated_addition: element-wise addition of path signature and embedding vector
-            - gated_concatenation: concatenation of linearly gated path signature and embedding vector
-            - scaled_concatenation: concatenation of single value scaled path signature and embedding vector
+            - gated_addition: element-wise addition of path signature
+              and embedding vector
+            - gated_concatenation: concatenation of linearly gated path signature
+              and embedding vector
+            - scaled_concatenation: concatenation of single value scaled path
+              signature and embedding vector
         """
         super(SWMHAUNetwork, self).__init__()
-        
-        self.swmhau = SWMHAU(input_channels=input_channels,
-                             output_channels=output_channels,
-                             log_signature=log_signature,
-                             sig_depth=sig_depth,
-                             num_heads=num_heads,
-                             num_layers=num_layers,
-                             augmentation_type=augmentation_type,
-                             hidden_dim_aug=hidden_dim_aug)
-        
+
+        self.swmhau = SWMHAU(
+            input_channels=input_channels,
+            output_channels=output_channels,
+            log_signature=log_signature,
+            sig_depth=sig_depth,
+            num_heads=num_heads,
+            num_layers=num_layers,
+            augmentation_type=augmentation_type,
+            hidden_dim_aug=hidden_dim_aug,
+        )
+
         # determining how to concatenate features to the SWNU features
         self.embedding_dim = embedding_dim
         self.num_features = num_features
@@ -100,17 +108,15 @@ class SWMHAUNetwork(nn.Module):
         if isinstance(hidden_dim_ffn, int):
             hidden_dim_ffn = [hidden_dim_ffn]
         self.hidden_dim_ffn = hidden_dim_ffn
-        
-        self.ffn = FeedforwardNeuralNetModel(input_dim=self.feature_concat.output_dim,
-                                             hidden_dim=self.hidden_dim_ffn,
-                                             output_dim=output_dim,
-                                             dropout_rate=dropout_rate)
 
-    def forward(
-        self,
-        path: torch.Tensor,
-        features: torch.Tensor | None = None
-    ):
+        self.ffn = FeedforwardNeuralNetModel(
+            input_dim=self.feature_concat.output_dim,
+            hidden_dim=self.hidden_dim_ffn,
+            output_dim=output_dim,
+            dropout_rate=dropout_rate,
+        )
+
+    def forward(self, path: torch.Tensor, features: torch.Tensor | None = None):
         # path has dimensions [batch, length of signal, channels]
         # features has dimensions [batch, num_features+embedding_dim]
         # use SWMHAU to obtain feature set

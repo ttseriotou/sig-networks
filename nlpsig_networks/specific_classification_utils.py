@@ -12,9 +12,12 @@ from sklearn.model_selection import GroupShuffleSplit
 class Folds:
     def __init__(self, num_folds=5):
         # Folders to read the data from
-        FOLDER_complete_dataset = "/storage/adtsakal/MoC_dataset"  # directory of the dataset (datadrive or storage)
-        TYPE_of_labelling = "three_labels"  # or "five_labels"
-        TYPE_of_agreement = "majority"  # or "intersection" (i.e., requiring majority or perfect agreement)
+        # directory of the dataset (datadrive or storage)
+        FOLDER_complete_dataset = "/storage/adtsakal/MoC_dataset"
+        # or "five_labels"
+        TYPE_of_labelling = "three_labels"
+        # or "intersection" (i.e., requiring majority or perfect agreement)
+        TYPE_of_agreement = "majority"
         FOLDER_dataset = (
             FOLDER_complete_dataset
             + "/"
@@ -24,11 +27,11 @@ class Folds:
             + "/"
         )
 
+        # list with NUM_folds sublists, each containing the
+        # paths to the corresponding fold's timelines
         self.NUM_folds = num_folds
         self.FOLDER_dataset = FOLDER_dataset
-        self.FOLD_to_TIMELINE = (
-            []
-        )  # list with NUM_folds sublists, each containing the paths to the corresponding fold's timelines
+        self.FOLD_to_TIMELINE = []
 
         for _fld in range(self.NUM_folds):
             _tmp_fldr = self.FOLDER_dataset + str(_fld) + "/"
@@ -69,7 +72,9 @@ class Folds:
 
     def get_timelines_except_for_fold(self, fold):
         """
-        Returns lists of different fields of all timelines EXCEPT FOR the specified fold.
+        Returns lists of different fields of all timelines
+        EXCEPT FOR the specified fold.
+
         Input:
             - fold (int): the fold we want to avoid retrieving the timelines from
         Output (lists of posts):
@@ -90,7 +95,6 @@ class Folds:
         return timeline_ids, post_ids, texts, np.array(labels)
 
     def get_labels(self, df):
-
         # dictionary of labels - 3-class classification
         y_dict3 = {}
         y_dict3["0"] = 0
@@ -107,7 +111,6 @@ class Folds:
         return y_data
 
     def get_splits(self, df, x_data, y_data, test_fold, dev_size=0.33):
-
         # Just getting the train/test data: timelines_ids, posts_id, texts, labels
         test_tl_ids, test_pids, test_texts, test_labels = self.get_timelines_for_fold(
             test_fold
@@ -202,7 +205,8 @@ def process_model_results(model_code_name, FOLDER_results):
             output_dict=True,
         )
         metrics_tab = pd.DataFrame(metrics_tab).transpose()
-        # combine the metrics with the rest of the seeds in order to take average at the end
+        # combine the metrics with the rest of the
+        # seeds in order to take average at the end
         metrics_overall += metrics_tab
 
     return metrics_overall / len(results0["classifier_params"]["RANDOM_SEED_list"])

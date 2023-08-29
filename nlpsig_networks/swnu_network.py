@@ -1,10 +1,12 @@
 from __future__ import annotations
+
 import signatory
 import torch
 import torch.nn as nn
-from nlpsig_networks.swnu import SWNU
-from nlpsig_networks.ffn_baseline import FeedforwardNeuralNetModel
+
 from nlpsig_networks.feature_concatenation import FeatureConcatenation
+from nlpsig_networks.ffn_baseline import FeedforwardNeuralNetModel
+from nlpsig_networks.swnu import SWNU
 
 
 class SWNUNetwork(nn.Module):
@@ -72,31 +74,36 @@ class SWNUNetwork(nn.Module):
             by default "gated_addition".
             Options are:
             - concatenation: concatenation of path signature and embedding vector
-            - gated_addition: element-wise addition of path signature and embedding vector
-            - gated_concatenation: concatenation of linearly gated path signature and embedding vector
-            - scaled_concatenation: concatenation of single value scaled path signature and embedding vector
+            - gated_addition: element-wise addition of path signature
+              and embedding vector
+            - gated_concatenation: concatenation of linearly gated path signature
+              and embedding vector
+            - scaled_concatenation: concatenation of single value scaled path
+              signature and embedding vector
         """
         super(SWNUNetwork, self).__init__()
-        
-        self.swnu = SWNU(input_channels=input_channels,
-                         output_channels=output_channels,
-                         log_signature=log_signature,
-                         sig_depth=sig_depth,
-                         hidden_dim=hidden_dim_swnu,
-                         augmentation_type=augmentation_type,
-                         hidden_dim_aug=hidden_dim_aug,
-                         BiLSTM=BiLSTM)
-        
+
+        self.swnu = SWNU(
+            input_channels=input_channels,
+            output_channels=output_channels,
+            log_signature=log_signature,
+            sig_depth=sig_depth,
+            hidden_dim=hidden_dim_swnu,
+            augmentation_type=augmentation_type,
+            hidden_dim_aug=hidden_dim_aug,
+            BiLSTM=BiLSTM,
+        )
+
         # signature without lift (for passing into FFN)
         if log_signature:
             signature_output_channels = signatory.logsignature_channels(
-                in_channels= self.swnu.hidden_dim[-1], depth=sig_depth
+                in_channels=self.swnu.hidden_dim[-1], depth=sig_depth
             )
         else:
             signature_output_channels = signatory.signature_channels(
-                channels= self.swnu.hidden_dim[-1], depth=sig_depth
+                channels=self.swnu.hidden_dim[-1], depth=sig_depth
             )
-        
+
         # determining how to concatenate features to the SWNU features
         self.embedding_dim = embedding_dim
         self.num_features = num_features
@@ -107,28 +114,26 @@ class SWNUNetwork(nn.Module):
             embedding_dim=self.embedding_dim,
             comb_method=self.comb_method,
         )
-        
+
         # FFN for classification
         # make sure hidden_dim_ffn a list of integers
         if isinstance(hidden_dim_ffn, int):
             hidden_dim_ffn = [hidden_dim_ffn]
         self.hidden_dim_ffn = hidden_dim_ffn
-        
-        self.ffn = FeedforwardNeuralNetModel(input_dim=self.feature_concat.output_dim,
-                                             hidden_dim=self.hidden_dim_ffn,
-                                             output_dim=output_dim,
-                                             dropout_rate=dropout_rate)
 
-    def forward(
-        self,
-        path: torch.Tensor,
-        features: torch.Tensor | None = None
-    ):
+        self.ffn = FeedforwardNeuralNetModel(
+            input_dim=self.feature_concat.output_dim,
+            hidden_dim=self.hidden_dim_ffn,
+            output_dim=output_dim,
+            dropout_rate=dropout_rate,
+        )
+
+    def forward(self, path: torch.Tensor, features: torch.Tensor | None = None):
         # path has dimensions [batch, length of signal, channels]
         # features has dimensions [batch, num_features+embedding_dim]
         # use SWNU to obtain feature set
         out = self.swnu(path)
-        
+
         # combine with features provided
         out = self.feature_concat(out, features)
 

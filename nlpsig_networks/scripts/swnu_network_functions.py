@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-import nlpsig
-from nlpsig_networks.pytorch_utils import _get_timestamp, SaveBestModel, set_seed
-from nlpsig_networks.swnu_network import SWNUNetwork
-from nlpsig_networks.scripts.implement_model import implement_model
+import os
 from typing import Iterable
-import torch
+
+import nlpsig
 import numpy as np
 import pandas as pd
+import torch
 from tqdm.auto import tqdm
-import os
+
+from nlpsig_networks.pytorch_utils import SaveBestModel, _get_timestamp, set_seed
+from nlpsig_networks.scripts.implement_model import implement_model
+from nlpsig_networks.swnu_network import SWNUNetwork
 
 
 def obtain_SWNUNetwork_input(
@@ -24,38 +26,40 @@ def obtain_SWNUNetwork_input(
     standardise_method: list[str] | str | None = None,
     include_features_in_path: bool = False,
     seed: int = 42,
-    path_indices: list | np.array | None = None
+    path_indices: list | np.array | None = None,
 ) -> dict[str, torch.tensor | int]:
     # use nlpsig to construct the path as a numpy array
     # first define how we construct the path
-    path_specifics = {"pad_by": "history",
-                      "zero_padding": True,
-                      "method": "k_last",
-                      "k": k,
-                      "features": features,
-                      "standardise_method": standardise_method,
-                      "embeddings": "dim_reduced",
-                      "include_current_embedding": True,
-                      "pad_from_below": True}
-    
+    path_specifics = {
+        "pad_by": "history",
+        "zero_padding": True,
+        "method": "k_last",
+        "k": k,
+        "features": features,
+        "standardise_method": standardise_method,
+        "embeddings": "dim_reduced",
+        "include_current_embedding": True,
+        "pad_from_below": True,
+    }
+
     # first perform dimension reduction on embeddings
     if dimension == embeddings.shape[1]:
         # no need to perform dimensionality reduction
         embeddings_reduced = embeddings
     else:
-        reduction = nlpsig.DimReduce(method=method,
-                                     n_components=dimension)
-        embeddings_reduced = reduction.fit_transform(embeddings,
-                                                     random_state=seed)
-    
+        reduction = nlpsig.DimReduce(method=method, n_components=dimension)
+        embeddings_reduced = reduction.fit_transform(embeddings, random_state=seed)
+
     # obtain path by using PrepareData class and .pad method
-    paths = nlpsig.PrepareData(df,
-                               id_column=id_column,
-                               label_column=label_column,
-                               embeddings=embeddings,
-                               embeddings_reduced=embeddings_reduced)
+    paths = nlpsig.PrepareData(
+        df,
+        id_column=id_column,
+        label_column=label_column,
+        embeddings=embeddings,
+        embeddings_reduced=embeddings_reduced,
+    )
     paths.pad(**path_specifics)
-    
+
     # construct path for SWNUNetwork which is given as a dictionary with keys
     # "x_data", "input_channels" and "num_features"
     # include features and (full, not dimension reduced) embeddings in the FFN input
@@ -66,8 +70,8 @@ def obtain_SWNUNetwork_input(
         reduced_embeddings=False,
         path_indices=path_indices,
     )
-    
-    
+
+
 def implement_swnu_network(
     num_epochs: int,
     x_data: np.array | torch.Tensor | dict[str, np.array | torch.Tensor],
@@ -94,7 +98,7 @@ def implement_swnu_network(
     comb_method: str = "concatenation",
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
-    split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,
+    split_indices: tuple[Iterable[int] | None] | None = None,
     k_fold: bool = False,
     n_splits: int = 5,
     patience: int = 10,
@@ -104,7 +108,7 @@ def implement_swnu_network(
 ) -> tuple[SWNUNetwork, pd.DataFrame]:
     # set seed
     set_seed(seed)
-    
+
     # initialise SWNUNetwork
     SWNUNetwork_args = {
         "input_channels": input_channels,
@@ -120,13 +124,13 @@ def implement_swnu_network(
         "augmentation_type": augmentation_type,
         "hidden_dim_aug": hidden_dim_aug,
         "BiLSTM": BiLSTM,
-        "comb_method": comb_method
+        "comb_method": comb_method,
     }
     swnu_network_model = SWNUNetwork(**SWNUNetwork_args)
-    
+
     if verbose_model:
         print(swnu_network_model)
-    
+
     # convert data to torch tensors
     # deal with case if x_data is a dictionary
     if isinstance(x_data, dict):
@@ -143,24 +147,26 @@ def implement_swnu_network(
     if not isinstance(y_data, torch.Tensor):
         y_data = torch.tensor(y_data)
 
-    return implement_model(model=swnu_network_model,
-                           num_epochs=num_epochs,
-                           x_data=x_data,
-                           y_data=y_data,
-                           learning_rate=learning_rate,
-                           seed=seed,
-                           loss=loss,
-                           gamma=gamma,
-                           device=device,
-                           batch_size=batch_size,
-                           data_split_seed=data_split_seed,
-                           split_ids=split_ids,
-                           split_indices=split_indices,
-                           k_fold=k_fold,
-                           n_splits=n_splits,
-                           patience=patience,
-                           verbose_training=verbose_training,
-                           verbose_results=verbose_results)
+    return implement_model(
+        model=swnu_network_model,
+        num_epochs=num_epochs,
+        x_data=x_data,
+        y_data=y_data,
+        learning_rate=learning_rate,
+        seed=seed,
+        loss=loss,
+        gamma=gamma,
+        device=device,
+        batch_size=batch_size,
+        data_split_seed=data_split_seed,
+        split_ids=split_ids,
+        split_indices=split_indices,
+        k_fold=k_fold,
+        n_splits=n_splits,
+        patience=patience,
+        verbose_training=verbose_training,
+        verbose_results=verbose_results,
+    )
 
 
 def swnu_network_hyperparameter_search(
@@ -195,36 +201,36 @@ def swnu_network_hyperparameter_search(
     path_indices: list | np.array | None = None,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
-    split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,
+    split_indices: tuple[Iterable[int] | None] | None = None,
     k_fold: bool = False,
     n_splits: int = 5,
     patience: int = 10,
     validation_metric: str = "f1",
     results_output: str | None = None,
-    verbose: bool = True
+    verbose: bool = True,
 ):
     if validation_metric not in ["loss", "accuracy", "f1"]:
         raise ValueError("validation_metric must be either 'loss', 'accuracy' or 'f1'")
-    
+
     # initialise SaveBestModel class
     model_output = f"best_swnu_network_model_{_get_timestamp()}.pkl"
-    save_best_model = SaveBestModel(metric=validation_metric,
-                                    output=model_output,
-                                    verbose=verbose)
+    save_best_model = SaveBestModel(
+        metric=validation_metric, output=model_output, verbose=verbose
+    )
 
     if isinstance(features, str):
         features = [features]
     elif features is None:
         features = []
-        
+
     if isinstance(standardise_method, str):
         standardise_method = [standardise_method]
     elif standardise_method is None:
         standardise_method = []
-    
+
     if conv_output_channels is None:
         conv_output_channels = [None]
-    
+
     # find model parameters that has the best validation
     results_df = pd.DataFrame()
     model_id = 0
@@ -235,8 +241,7 @@ def swnu_network_hyperparameter_search(
         for dimension in tqdm(dimensions):
             for method in tqdm(dim_reduce_methods):
                 print("\n" + "#" * 50)
-                print(f"dimension: {dimension} | "
-                      f"method: {method}")
+                print(f"dimension: {dimension} | " f"method: {method}")
                 input = obtain_SWNUNetwork_input(
                     method=method,
                     dimension=dimension,
@@ -248,23 +253,27 @@ def swnu_network_hyperparameter_search(
                     features=features,
                     standardise_method=standardise_method,
                     include_features_in_path=include_features_in_path,
-                    path_indices=path_indices
+                    path_indices=path_indices,
                 )
 
-                for swnu_hidden_dim, sig_depth in tqdm(swnu_hidden_dim_sizes_and_sig_depths):
+                for swnu_hidden_dim, sig_depth in tqdm(
+                    swnu_hidden_dim_sizes_and_sig_depths
+                ):
                     for ffn_hidden_dim in tqdm(ffn_hidden_dim_sizes):
                         for output_channels in tqdm(conv_output_channels):
                             for dropout in tqdm(dropout_rates):
                                 for lr in tqdm(learning_rates):
                                     if verbose:
                                         print("\n" + "!" * 50)
-                                        print(f"swnu_hidden_dim: {swnu_hidden_dim} | "
-                                                f"ffn_hidden_dim: {ffn_hidden_dim} | "
-                                                f"sig_depth: {sig_depth} | "
-                                                f"output_channels: {output_channels} | "
-                                                f"dropout: {dropout} | "
-                                                f"learning_rate: {lr}")
-                                        
+                                        print(
+                                            f"swnu_hidden_dim: {swnu_hidden_dim} | "
+                                            f"ffn_hidden_dim: {ffn_hidden_dim} | "
+                                            f"sig_depth: {sig_depth} | "
+                                            f"output_channels: {output_channels} | "
+                                            f"dropout: {dropout} | "
+                                            f"learning_rate: {lr}"
+                                        )
+
                                     scores = []
                                     verbose_model = verbose
                                     for seed in seeds:
@@ -299,28 +308,44 @@ def swnu_network_hyperparameter_search(
                                             n_splits=n_splits,
                                             patience=patience,
                                             verbose_results=verbose,
-                                            verbose_model=verbose_model
+                                            verbose_model=verbose_model,
                                         )
                                         # save metric that we want to validate on
-                                        # taking the mean over the performance on the folds for the seed
-                                        # if k_fold=False, .mean() just returns the performance for the seed
-                                        scores.append(results[f"valid_{validation_metric}"].mean())
-                                        
+                                        # take mean of performance on the folds
+                                        # if k_fold=False, return performance for seed
+                                        scores.append(
+                                            results[f"valid_{validation_metric}"].mean()
+                                        )
+
                                         # concatenate to results dataframe
                                         results["k"] = k
                                         results["dimensions"] = dimension
                                         results["sig_depth"] = sig_depth
                                         results["method"] = method
-                                        results["input_channels"] = input["input_channels"]
+                                        results["input_channels"] = input[
+                                            "input_channels"
+                                        ]
                                         results["output_channels"] = output_channels
                                         results["features"] = [features]
-                                        results["standardise_method"] = [standardise_method]
-                                        results["include_features_in_path"] = include_features_in_path
-                                        results["embedding_dim"] = input["embedding_dim"]
+                                        results["standardise_method"] = [
+                                            standardise_method
+                                        ]
+                                        results[
+                                            "include_features_in_path"
+                                        ] = include_features_in_path
+                                        results["embedding_dim"] = input[
+                                            "embedding_dim"
+                                        ]
                                         results["num_features"] = input["num_features"]
                                         results["log_signature"] = log_signature
-                                        results["swnu_hidden_dim"] = [tuple(swnu_hidden_dim) for _ in range(len(results.index))]
-                                        results["ffn_hidden_dim"] = [tuple(ffn_hidden_dim) for _ in range(len(results.index))]
+                                        results["swnu_hidden_dim"] = [
+                                            tuple(swnu_hidden_dim)
+                                            for _ in range(len(results.index))
+                                        ]
+                                        results["ffn_hidden_dim"] = [
+                                            tuple(ffn_hidden_dim)
+                                            for _ in range(len(results.index))
+                                        ]
                                         results["dropout_rate"] = dropout
                                         results["learning_rate"] = lr
                                         results["seed"] = seed
@@ -328,48 +353,66 @@ def swnu_network_hyperparameter_search(
                                         results["loss_function"] = loss
                                         results["gamma"] = gamma
                                         results["k_fold"] = k_fold
-                                        results["n_splits"] = n_splits if k_fold else None
+                                        results["n_splits"] = (
+                                            n_splits if k_fold else None
+                                        )
                                         results["augmentation_type"] = augmentation_type
-                                        results["hidden_dim_aug"] = [tuple(hidden_dim_aug) for _ in range(len(results.index))] if hidden_dim_aug is not None else None
+                                        results["hidden_dim_aug"] = (
+                                            [
+                                                tuple(hidden_dim_aug)
+                                                for _ in range(len(results.index))
+                                            ]
+                                            if hidden_dim_aug is not None
+                                            else None
+                                        )
                                         results["comb_method"] = comb_method
                                         results["batch_size"] = batch_size
                                         results["model_id"] = model_id
                                         results_df = pd.concat([results_df, results])
-                                        
+
                                         # don't continue printing out the model
                                         verbose_model = False
 
                                     model_id += 1
-                                    scores_mean = sum(scores)/len(scores)
-                                    
+                                    scores_mean = sum(scores) / len(scores)
+
                                     if verbose:
-                                        print(f"- average{' (kfold)' if k_fold else ''} "
-                                            f"(validation) metric score: {scores_mean}")
-                                        print(f"scores for the different seeds: {scores}")
-                                    # save best model according to averaged metric over the different seeds
-                                    save_best_model(current_valid_metric=scores_mean,
-                                                    extra_info={
-                                                        "k": k,
-                                                        "dimensions": dimension,
-                                                        "sig_depth": sig_depth,
-                                                        "method": method,
-                                                        "input_channels": input["input_channels"],
-                                                        "output_channels": output_channels,
-                                                        "features": features,
-                                                        "standardise_method": standardise_method,
-                                                        "include_features_in_path": include_features_in_path,
-                                                        "embedding_dim": input["embedding_dim"],
-                                                        "num_features": input["num_features"],
-                                                        "log_signature": log_signature,
-                                                        "swnu_hidden_dim": swnu_hidden_dim,
-                                                        "ffn_hidden_dim": ffn_hidden_dim,
-                                                        "dropout_rate": dropout,
-                                                        "learning_rate": lr,
-                                                        "BiLSTM": BiLSTM,
-                                                        "augmentation_type": augmentation_type,
-                                                        "hidden_dim_aug": hidden_dim_aug,
-                                                        "comb_method": comb_method,
-                                                    })
+                                        print(
+                                            f"- average{' (kfold)' if k_fold else ''} "
+                                            f"(validation) metric score: {scores_mean}"
+                                        )
+                                        print(
+                                            f"scores for the different seeds: {scores}"
+                                        )
+                                    # save best model according to averaged metric
+                                    # over the different seeds
+                                    save_best_model(
+                                        current_valid_metric=scores_mean,
+                                        extra_info={
+                                            "k": k,
+                                            "dimensions": dimension,
+                                            "sig_depth": sig_depth,
+                                            "method": method,
+                                            "input_channels": input["input_channels"],
+                                            "output_channels": output_channels,
+                                            "features": features,
+                                            "standardise_method": standardise_method,
+                                            "include_features_in_path": (
+                                                include_features_in_path
+                                            ),
+                                            "embedding_dim": input["embedding_dim"],
+                                            "num_features": input["num_features"],
+                                            "log_signature": log_signature,
+                                            "swnu_hidden_dim": swnu_hidden_dim,
+                                            "ffn_hidden_dim": ffn_hidden_dim,
+                                            "dropout_rate": dropout,
+                                            "learning_rate": lr,
+                                            "BiLSTM": BiLSTM,
+                                            "augmentation_type": augmentation_type,
+                                            "hidden_dim_aug": hidden_dim_aug,
+                                            "comb_method": comb_method,
+                                        },
+                                    )
 
     checkpoint = torch.load(f=model_output)
     if verbose:
@@ -388,7 +431,7 @@ def swnu_network_hyperparameter_search(
         features=checkpoint["extra_info"]["features"],
         standardise_method=checkpoint["extra_info"]["standardise_method"],
         include_features_in_path=checkpoint["extra_info"]["include_features_in_path"],
-        path_indices=path_indices
+        path_indices=path_indices,
     )
 
     test_scores = []
@@ -416,7 +459,7 @@ def swnu_network_hyperparameter_search(
             device=device,
             batch_size=batch_size,
             augmentation_type=checkpoint["extra_info"]["augmentation_type"],
-            hidden_dim_aug = checkpoint["extra_info"]["hidden_dim_aug"],
+            hidden_dim_aug=checkpoint["extra_info"]["hidden_dim_aug"],
             comb_method=checkpoint["extra_info"]["comb_method"],
             data_split_seed=data_split_seed,
             split_ids=split_ids,
@@ -426,14 +469,14 @@ def swnu_network_hyperparameter_search(
             patience=patience,
             verbose_training=False,
             verbose_results=False,
-            verbose_model=False
+            verbose_model=False,
         )
 
         # save metric that we want to validate on
         # taking the mean over the performance on the folds for the seed
-        # if k_fold=False, .mean() just returns the performance for the seed
+        # if k_fold=False, this returns the performance for the seed
         test_scores.append(test_results[validation_metric].mean())
-        
+
         # concatenate to results dataframe
         test_results["k"] = checkpoint["extra_info"]["k"]
         test_results["dimensions"] = checkpoint["extra_info"]["dimensions"]
@@ -447,10 +490,14 @@ def swnu_network_hyperparameter_search(
         test_results["embedding_dim"] = input["embedding_dim"]
         test_results["num_features"] = input["num_features"]
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
-        test_results["swnu_hidden_dim"] = [tuple(checkpoint["extra_info"]["swnu_hidden_dim"])
-                                           for _ in range(len(test_results.index))]
-        test_results["ffn_hidden_dim"] = [tuple(checkpoint["extra_info"]["ffn_hidden_dim"])
-                                          for _ in range(len(test_results.index))]
+        test_results["swnu_hidden_dim"] = [
+            tuple(checkpoint["extra_info"]["swnu_hidden_dim"])
+            for _ in range(len(test_results.index))
+        ]
+        test_results["ffn_hidden_dim"] = [
+            tuple(checkpoint["extra_info"]["ffn_hidden_dim"])
+            for _ in range(len(test_results.index))
+        ]
         test_results["dropout_rate"] = checkpoint["extra_info"]["dropout_rate"]
         test_results["learning_rate"] = checkpoint["extra_info"]["learning_rate"]
         test_results["seed"] = seed
@@ -459,29 +506,52 @@ def swnu_network_hyperparameter_search(
         test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
         test_results["n_splits"] = n_splits if k_fold else None
-        test_results["augmentation_type"] = checkpoint["extra_info"]["augmentation_type"]
-        test_results["hidden_dim_aug"] = None if checkpoint["extra_info"]["hidden_dim_aug"] is None else [tuple([checkpoint["extra_info"]["hidden_dim_aug"]]) for _ in range(len(test_results.index))] if (type(checkpoint["extra_info"]["hidden_dim_aug"])==int) else [tuple(checkpoint["extra_info"]["hidden_dim_aug"]) for _ in range(len(test_results.index))]
+        test_results["augmentation_type"] = checkpoint["extra_info"][
+            "augmentation_type"
+        ]
+        test_results["hidden_dim_aug"] = (
+            None
+            if checkpoint["extra_info"]["hidden_dim_aug"] is None
+            else [
+                tuple([checkpoint["extra_info"]["hidden_dim_aug"]])
+                for _ in range(len(test_results.index))
+            ]
+            if (type(checkpoint["extra_info"]["hidden_dim_aug"]) == int)
+            else [
+                tuple(checkpoint["extra_info"]["hidden_dim_aug"])
+                for _ in range(len(test_results.index))
+            ]
+        )
         test_results["comb_method"] = checkpoint["extra_info"]["comb_method"]
         test_results["batch_size"] = batch_size
         test_results_df = pd.concat([test_results_df, test_results])
-        
-    test_scores_mean = sum(test_scores)/len(test_scores)
+
+    test_scores_mean = sum(test_scores) / len(test_scores)
     if verbose:
         print(f"best validation score: {save_best_model.best_valid_metric}")
         print(f"- Best model: average (test) metric score: {test_scores_mean}")
         print(f"scores for the different seeds: {test_scores}")
-        
+
     if results_output is not None:
-        print("saving results dataframe to CSV for this "
-            f"hyperparameter search in {results_output}")
+        print(
+            "saving results dataframe to CSV for this "
+            f"hyperparameter search in {results_output}"
+        )
         results_df.to_csv(results_output)
         best_results_output = results_output.replace(".csv", "_best_model.csv")
-        print("saving the best model results dataframe to CSV for this "
-              f"hyperparameter search in {best_results_output}")
+        print(
+            "saving the best model results dataframe to CSV for this "
+            f"hyperparameter search in {best_results_output}"
+        )
         test_results_df.to_csv(best_results_output)
-    
+
     # remove any models that have been saved
     if os.path.exists(model_output):
         os.remove(model_output)
-    
-    return results_df, test_results_df, save_best_model.best_valid_metric, checkpoint["extra_info"]
+
+    return (
+        results_df,
+        test_results_df,
+        save_best_model.best_valid_metric,
+        checkpoint["extra_info"],
+    )

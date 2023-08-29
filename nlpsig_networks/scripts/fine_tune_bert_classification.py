@@ -1,18 +1,18 @@
 from __future__ import annotations
-from nlpsig import TextEncoder
+
+import os
+import shutil
+from typing import Iterable
+
 import evaluate
 import numpy as np
 import pandas as pd
-from typing import Iterable
 import torch
-from tqdm.auto import tqdm
-from sklearn import metrics
-from nlpsig.classification_utils import DataSplits, Folds
-from nlpsig_networks.pytorch_utils import set_seed
-from nlpsig_networks.focal_loss import FocalLoss
-import os
-import shutil
 from datasets.arrow_dataset import Dataset
+from nlpsig import TextEncoder
+from nlpsig.classification_utils import DataSplits, Folds
+from sklearn import metrics
+from tqdm.auto import tqdm
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -20,7 +20,9 @@ from transformers import (
     PreTrainedModel,
     PreTrainedTokenizer,
 )
-from typing import Iterable
+
+from nlpsig_networks.focal_loss import FocalLoss
+from nlpsig_networks.pytorch_utils import set_seed
 
 
 def testing_transformer(
@@ -35,70 +37,72 @@ def testing_transformer(
     Function to evaluate a transformer model by computing the accuracy
     and F1 score.
     """
-    
+
     # set model to device is passed
     if isinstance(device, str):
         model.to(device)
-    
+
     # loop through test set and make prediction from model
     predicted = [None for _ in range(len(test_dataset))]
     for i in tqdm(range(len(test_dataset))):
-        inputs = tokenizer(test_dataset[feature_name][i],
-                           return_tensors="pt")
-        
+        inputs = tokenizer(test_dataset[feature_name][i], return_tensors="pt")
+
         # set model to device is passed
         if isinstance(device, str):
             inputs.to(device)
-            
+
         # obtain logits for input
         with torch.no_grad():
             logits = model(**inputs).logits
-        
+
         # store prediction
         predicted[i] = logits.argmax().item()
 
     # convert to torch tensor
     predicted = torch.tensor(predicted)
     labels = torch.tensor(test_dataset["label_as_id"])
-    
+
     # compute accuracy
     accuracy = ((predicted == labels).sum() / len(labels)).item()
-    
+
     # compute F1 scores
     f1_scores = metrics.f1_score(labels, predicted, average=None, zero_division=0.0)
     # compute macro F1 score
-    f1 = sum(f1_scores)/len(f1_scores)
-    
+    f1 = sum(f1_scores) / len(f1_scores)
+
     # compute precision scores
-    precision_scores = metrics.precision_score(labels, predicted, average=None, zero_division=0.0)
+    precision_scores = metrics.precision_score(
+        labels, predicted, average=None, zero_division=0.0
+    )
     # compute macro precision score
-    precision = sum(precision_scores)/len(precision_scores)
-    
+    precision = sum(precision_scores) / len(precision_scores)
+
     # compute recall scores
-    recall_scores = metrics.recall_score(labels, predicted, average=None, zero_division=0.0)
+    recall_scores = metrics.recall_score(
+        labels, predicted, average=None, zero_division=0.0
+    )
     # compute macro recall score
-    recall = sum(recall_scores)/len(recall_scores)
-    
+    recall = sum(recall_scores) / len(recall_scores)
+
     if verbose:
         # print evaluation metrics
-        print(
-            f"Accuracy on dataset of size {len(labels)}: "
-            f"{100 * accuracy} %."
-        )
+        print(f"Accuracy on dataset of size {len(labels)}: " f"{100 * accuracy} %.")
         print(f"- f1: {f1_scores}")
         print(f"- f1 (macro): {f1}")
         print(f"- precision (macro): {precision}")
         print(f"- recall (macro): {recall}")
-        
-    return {"predicted": predicted,
-            "labels": labels,
-            "accuracy": accuracy,
-            "f1": f1,
-            "f1_scores": [f1_scores],
-            "precision": precision,
-            "precision_scores": [precision_scores],
-            "recall": recall,
-            "recall_scores": [recall_scores]}
+
+    return {
+        "predicted": predicted,
+        "labels": labels,
+        "accuracy": accuracy,
+        "f1": f1,
+        "f1_scores": [f1_scores],
+        "precision": precision,
+        "precision_scores": [precision_scores],
+        "recall": recall,
+        "recall_scores": [recall_scores],
+    }
 
 
 def _fine_tune_transformer_for_data_split(
@@ -112,24 +116,25 @@ def _fine_tune_transformer_for_data_split(
     gamma: float = 0.0,
     batch_size: int = 64,
     path_indices: list | np.array | None = None,
-    split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | None = None,
+    split_indices: tuple[Iterable[int] | None] | None = None,
     save_model: bool = False,
     output_dir: str | None = None,
     device: str | None = None,
     verbose: bool = False,
 ) -> dict[str, float | list[float]]:
     """
-    Function to fine-tune and evalaute a model for a given data_split (via split_indices)
+    Function to fine-tune and evalaute a model for a given
+    data_split (via split_indices)
     """
-    
+
     # set seed
     set_seed(seed)
-    
+
     if output_dir is None:
         output_dir = f"fine_tuned_{pretrained_model_name}"
     if not isinstance(output_dir, str):
         raise TypeError("output_dir must be either a string or None")
-    
+
     if path_indices is not None:
         df = df.iloc[path_indices].reset_index(drop=True)
 
@@ -138,80 +143,87 @@ def _fine_tune_transformer_for_data_split(
     label_to_id = {str(y_data.unique()[i]): i for i in range(len(y_data.unique()))}
     id_to_label = {v: k for k, v in label_to_id.items()}
     output_dim = len(label_to_id.values())
-    
+
     # define loss
     if loss == "focal":
-        criterion = FocalLoss(gamma = gamma)
+        criterion = FocalLoss(gamma=gamma)
         y_train = torch.tensor(y_data.apply(lambda x: label_to_id[str(x)]).values)
         criterion.set_alpha_from_y(y=y_train)
     elif loss == "cross_entropy":
         criterion = torch.nn.CrossEntropyLoss()
     else:
         raise ValueError("loss must be either 'focal' or 'cross_entropy'")
-    
+
     # create column named "label_as_id" which are the corresponding IDs
     df["label_as_id"] = df[label_column].apply(lambda x: label_to_id[str(x)])
-    
+
     # initialise model, tokenizer and data_collator
     model = AutoModelForSequenceClassification.from_pretrained(
         pretrained_model_name,
         num_labels=output_dim,
         id2label=id_to_label,
-        label2id=label_to_id
+        label2id=label_to_id,
     )
-    
+
     # set model to device is passed
     if isinstance(device, str):
         model.to(device)
-    
+
     # set tokenizer and data collator
     tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name)
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-    
+
     # initialise TextEncoder object from nlpsig
     # use this to fine-tune the transformer to classification task
-    text_encoder = TextEncoder(df=df,
-                               feature_name=feature_name,
-                               model=model,
-                               tokenizer=tokenizer,
-                               data_collator=data_collator,
-                               verbose=False)
-    
+    text_encoder = TextEncoder(
+        df=df,
+        feature_name=feature_name,
+        model=model,
+        tokenizer=tokenizer,
+        data_collator=data_collator,
+        verbose=False,
+    )
+
     # tokenize the text in df[feature_name]
     text_encoder.tokenize_text()
-    
+
     # split the dataset using the indices which are passed in
     text_encoder.split_dataset(indices=split_indices)
-    
+
     # set up training arguments
-    text_encoder.set_up_training_args(output_dir=output_dir,
-                                      num_train_epochs=num_epochs,
-                                      per_device_train_batch_size=batch_size,
-                                      disable_tqdm=False,
-                                      save_strategy="epoch",
-                                      load_best_model_at_end=True,
-                                      seed=seed)
-    
+    text_encoder.set_up_training_args(
+        output_dir=output_dir,
+        num_train_epochs=num_epochs,
+        per_device_train_batch_size=batch_size,
+        disable_tqdm=False,
+        save_strategy="epoch",
+        load_best_model_at_end=True,
+        seed=seed,
+    )
+
     # set up trainer
     def _compute_metrics(eval_pred):
         accuracy = evaluate.load("accuracy")
         f1 = evaluate.load("f1")
         predictions = np.argmax(eval_pred.predictions, axis=1)
-        accuracy = accuracy.compute(predictions=predictions,
-                                    references=eval_pred.label_ids)['accuracy']
-        f1 = f1.compute(predictions=predictions, 
-                        references=eval_pred.label_ids,
-                        average="macro")['f1']
+        accuracy = accuracy.compute(
+            predictions=predictions, references=eval_pred.label_ids
+        )["accuracy"]
+        f1 = f1.compute(
+            predictions=predictions, references=eval_pred.label_ids, average="macro"
+        )["f1"]
         return {"accuracy": accuracy, "f1": f1}
 
-    text_encoder.set_up_trainer(data_collator=data_collator,
-                                compute_metrics=_compute_metrics,
-                                custom_loss=criterion.forward)
-    
+    text_encoder.set_up_trainer(
+        data_collator=data_collator,
+        compute_metrics=_compute_metrics,
+        custom_loss=criterion.forward,
+    )
+
     # train model
     text_encoder.fit_transformer_with_trainer_api()
-    
-    # evaluate 
+
+    # evaluate
     test_performance = testing_transformer(
         model=text_encoder.model,
         tokenizer=text_encoder.tokenizer,
@@ -220,7 +232,7 @@ def _fine_tune_transformer_for_data_split(
         device=device,
         verbose=verbose,
     )
-    
+
     if save_model:
         text_encoder.trainer.save_model(output_dir)
     else:
@@ -228,7 +240,7 @@ def _fine_tune_transformer_for_data_split(
         # make sure to delete any folders created
         if os.path.isdir(output_dir):
             shutil.rmtree(output_dir, ignore_errors=True)
-            
+
     return test_performance
 
 
@@ -244,7 +256,9 @@ def fine_tune_transformer_for_classification(
     path_indices: list | np.array | None = None,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
-    split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | tuple[tuple[Iterable[int], Iterable[int], Iterable[int]]] | None = None,
+    split_indices: tuple[Iterable[int] | None]
+    | tuple[tuple[Iterable[int] | None]]
+    | None = None,
     k_fold: bool = False,
     n_splits: int = 5,
     return_metric_for_each_fold: bool = False,
@@ -255,25 +269,30 @@ def fine_tune_transformer_for_classification(
     Function to fine-tune and evaluate a model by either using k_fold
     evaluation or a standard train/valid/test split.
     """
-    
+
     # set seed
     set_seed(seed)
-    
+
     # create dummy dataset for passing into Folds and DataSplit
-    datasize = len(df.index) if path_indices is None else len(df.iloc[path_indices].index)
+    datasize = (
+        len(df.index) if path_indices is None else len(df.iloc[path_indices].index)
+    )
     dummy_data = torch.ones(datasize)
-    
+
     if k_fold:
-        # perform KFold evaluation and return the performance on validation and test sets
-        # split dataset
-        folds = Folds(x_data=dummy_data,
-                      y_data=dummy_data,
-                      groups=split_ids,
-                      n_splits=n_splits,
-                      indices=split_indices,
-                      shuffle=True,
-                      random_state=data_split_seed)
-        
+        # perform KFold evaluation and return the performance
+        # on validation and test sets
+        # first split dataset
+        folds = Folds(
+            x_data=dummy_data,
+            y_data=dummy_data,
+            groups=split_ids,
+            n_splits=n_splits,
+            indices=split_indices,
+            shuffle=True,
+            random_state=data_split_seed,
+        )
+
         # create lists to record the test metrics for each fold
         accuracy = []
         f1 = []
@@ -282,7 +301,7 @@ def fine_tune_transformer_for_classification(
         precision_scores = []
         recall = []
         recall_scores = []
-        
+
         labels = torch.empty((0))
         predicted = torch.empty((0))
         for k in range(n_splits):
@@ -302,11 +321,11 @@ def fine_tune_transformer_for_classification(
                 device=device,
                 verbose=verbose,
             )
-            
+
             # store the true labels and predicted labels for this fold
             labels = torch.cat([labels, results_for_fold["labels"]])
             predicted = torch.cat([predicted, results_for_fold["predicted"]])
-            
+
             # store the metrics for this fold
             accuracy.append(results_for_fold["accuracy"])
             f1.append(results_for_fold["f1"])
@@ -315,45 +334,57 @@ def fine_tune_transformer_for_classification(
             precision_scores.append(results_for_fold["precision_scores"])
             recall.append(results_for_fold["recall"])
             recall_scores.append(results_for_fold["recall_scores"])
-            
+
         if not return_metric_for_each_fold:
             # compute how well the model performed on the test sets together
             # compute accuracy
             accuracy = ((predicted == labels).sum() / len(labels)).item()
-            
+
             # compute F1 scores
-            f1_scores = metrics.f1_score(labels, predicted, average=None, zero_division=0.0)
+            f1_scores = metrics.f1_score(
+                labels, predicted, average=None, zero_division=0.0
+            )
             # compute macro F1 score
-            f1 = sum(f1_scores)/len(f1_scores)
-            
+            f1 = sum(f1_scores) / len(f1_scores)
+
             # compute precision scores
-            precision_scores = metrics.precision_score(labels, predicted, average=None, zero_division=0.0)
+            precision_scores = metrics.precision_score(
+                labels, predicted, average=None, zero_division=0.0
+            )
             # compute macro precision score
-            precision = sum(precision_scores)/len(precision_scores)
-            
+            precision = sum(precision_scores) / len(precision_scores)
+
             # compute recall scores
-            recall_scores = metrics.recall_score(labels, predicted, average=None, zero_division=0.0)
+            recall_scores = metrics.recall_score(
+                labels, predicted, average=None, zero_division=0.0
+            )
             # compute macro recall score
-            recall = sum(recall_scores)/len(recall_scores)
-            
-        return pd.DataFrame({"accuracy": accuracy,
-                             "f1": f1,
-                             "f1_scores": [f1_scores],
-                             "precision": precision,
-                             "precision_scores": [precision_scores],
-                             "recall": recall,
-                             "recall_scores": [recall_scores]})
+            recall = sum(recall_scores) / len(recall_scores)
+
+        return pd.DataFrame(
+            {
+                "accuracy": accuracy,
+                "f1": f1,
+                "f1_scores": [f1_scores],
+                "precision": precision,
+                "precision_scores": [precision_scores],
+                "recall": recall,
+                "recall_scores": [recall_scores],
+            }
+        )
     else:
         # split dataset
-        split_data = DataSplits(x_data=dummy_data,
-                                y_data=dummy_data,
-                                groups=split_ids,
-                                train_size=0.8,
-                                valid_size=0.2,
-                                indices=split_indices,
-                                shuffle=True,
-                                random_state=data_split_seed)
-        
+        split_data = DataSplits(
+            x_data=dummy_data,
+            y_data=dummy_data,
+            groups=split_ids,
+            train_size=0.8,
+            valid_size=0.2,
+            indices=split_indices,
+            shuffle=True,
+            random_state=data_split_seed,
+        )
+
         # compute how well the model performs on this data split
         results = _fine_tune_transformer_for_data_split(
             pretrained_model_name=pretrained_model_name,
@@ -370,15 +401,19 @@ def fine_tune_transformer_for_classification(
             device=device,
             verbose=verbose,
         )
-        
-        return pd.DataFrame({"accuracy": results["accuracy"],
-                             "f1": results["f1"],
-                             "f1_scores": [results["f1_scores"]],
-                             "precision": results["precision"],
-                             "precision_scores": [results["precision_scores"]],
-                             "recall": results["recall"],
-                             "recall_scores": [results["recall_scores"]]})
-        
+
+        return pd.DataFrame(
+            {
+                "accuracy": results["accuracy"],
+                "f1": results["f1"],
+                "f1_scores": [results["f1_scores"]],
+                "precision": results["precision"],
+                "precision_scores": [results["precision_scores"]],
+                "recall": results["recall"],
+                "recall_scores": [results["recall_scores"]],
+            }
+        )
+
 
 def fine_tune_transformer_average_seed(
     num_epochs: int,
@@ -392,7 +427,9 @@ def fine_tune_transformer_average_seed(
     path_indices: list | np.array | None = None,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
-    split_indices: tuple[Iterable[int], Iterable[int], Iterable[int]] | tuple[tuple[Iterable[int], Iterable[int], Iterable[int]]] | None = None,
+    split_indices: tuple[Iterable[int] | None]
+    | tuple[tuple[Iterable[int] | None]]
+    | None = None,
     k_fold: bool = False,
     n_splits: int = 5,
     validation_metric: str = "f1",
@@ -407,7 +444,7 @@ def fine_tune_transformer_average_seed(
     """
     if validation_metric not in ["accuracy", "f1"]:
         raise ValueError("validation_metric must be either 'accuracy' or 'f1'")
-    
+
     test_scores = []
     test_results_df = pd.DataFrame()
     for seed in seeds:
@@ -430,23 +467,23 @@ def fine_tune_transformer_average_seed(
             device=device,
             verbose=verbose,
         )
-        
+
         test_results["seed"] = seed
         test_results["loss"] = loss
         test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
         test_results_df = pd.concat([test_results_df, test_results])
-        
+
         # save metric that we want to validate on
-        # taking the mean over the performance on the folds for the seed
-        # if k_fold=False, .mean() just returns the performance for the seed
+        # take mean of performance on the folds
+        # if k_fold=False, return performance for seed
         test_scores.append(test_results[validation_metric].mean())
-        
-    test_scores_mean = sum(test_scores)/len(test_scores)
+
+    test_scores_mean = sum(test_scores) / len(test_scores)
     if verbose:
         print(f"- average (test) metric score: {test_scores_mean}")
         print(f"scores for the different seeds: {test_scores}")
-        
+
     if results_output is not None:
         print(f"saving the results dataframe to CSV in {results_output}")
         test_results_df.to_csv(results_output)

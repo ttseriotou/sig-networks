@@ -1,43 +1,48 @@
 from __future__ import annotations
-import signatory
+
 import torch
 import torch.nn as nn
-from nlpsig_networks.swmhau import SWMHA, SWMHAU
-from nlpsig_networks.ffn_baseline import FeedforwardNeuralNetModel
+
 from nlpsig_networks.feature_concatenation import FeatureConcatenation
+from nlpsig_networks.ffn_baseline import FeedforwardNeuralNetModel
+from nlpsig_networks.swmhau import SWMHA, SWMHAU
 
 
 class SeqSigNetAttention(nn.Module):
     """
     MHA applied to Deep Signature Neural Network Units for classification.
     """
-    
+
     def __init__(
-        self, 
-        input_channels: int, 
+        self,
+        input_channels: int,
         output_channels: int,
-        num_features: int, 
-        embedding_dim: int, 
+        num_features: int,
+        embedding_dim: int,
         log_signature: bool,
-        sig_depth: int, 
+        sig_depth: int,
         num_heads: int,
         num_layers: int,
         hidden_dim_ffn: list[int] | int,
-        output_dim: int, 
+        output_dim: int,
         dropout_rate: float,
-        augmentation_type: str = 'Conv1d', 
+        augmentation_type: str = "Conv1d",
         hidden_dim_aug: list[int] | int | None = None,
-        comb_method: str ='concatenation'):
+        comb_method: str = "concatenation",
+    ):
         """
         SeqSigNetAttention network for classification.
-        
-        Input data will have the size: [batch size, window size (w), all embedding dimensions (history + time + post), unit size (n)]
-        Note: unit sizes will be in reverse chronological order, starting from the more recent and ending with the one further back in time.
-        
+
+        Input data will have the size: [batch size, window size (w),
+        all embedding dimensions (history + time + post), unit size (n)]
+        Note: unit sizes will be in reverse chronological order, starting
+        from the more recent and ending with the one further back in time.
+
         Parameters
         ----------
         input_channels : int
-            Dimension of the (dimensonally reduced) history embeddings that will be passed in.
+            Dimension of the (dimensonally reduced) history embeddings
+            that will be passed in.
         output_channels : int
             Requested dimension of the embeddings after convolution layer.
         num_features : int
@@ -72,9 +77,12 @@ class SeqSigNetAttention(nn.Module):
             by default "gated_addition".
             Options are:
             - concatenation: concatenation of path signature and embedding vector
-            - gated_addition: element-wise addition of path signature and embedding vector
-            - gated_concatenation: concatenation of linearly gated path signature and embedding vector
-            - scaled_concatenation: concatenation of single value scaled path signature and embedding vector
+            - gated_addition: element-wise addition of path signature
+              and embedding vector
+            - gated_concatenation: concatenation of linearly gated path signature
+              and embedding vector
+            - scaled_concatenation: concatenation of single value scaled path
+              signature and embedding vector
         """
 
         super(SeqSigNetAttention, self).__init__()
@@ -88,12 +96,15 @@ class SeqSigNetAttention(nn.Module):
             num_heads=num_heads,
             num_layers=num_layers,
             augmentation_type=augmentation_type,
-            hidden_dim_aug=hidden_dim_aug
+            hidden_dim_aug=hidden_dim_aug,
         )
-        
-        # linear layer to project the output of the SWMHAU to the output dimension of the convolution
-        self.linear_layer = nn.Linear(self.swmhau.swmha.signature_terms, output_channels)
-        
+
+        # linear layer to project the output of the SWMHAU to
+        # the output dimension of the convolution
+        self.linear_layer = nn.Linear(
+            self.swmhau.swmha.signature_terms, output_channels
+        )
+
         # SWMHA applied to the output of the linear layer
         self.swmha = SWMHA(
             input_size=output_channels,
@@ -102,7 +113,7 @@ class SeqSigNetAttention(nn.Module):
             num_heads=num_heads,
             num_layers=1,
         )
-        
+
         # determining how to concatenate features to the SWMHAU features
         self.embedding_dim = embedding_dim
         self.num_features = num_features
@@ -113,42 +124,41 @@ class SeqSigNetAttention(nn.Module):
             embedding_dim=self.embedding_dim,
             comb_method=self.comb_method,
         )
-        
+
         # FFN for classification
         # make sure hidden_dim_ffn a list of integers
         if isinstance(hidden_dim_ffn, int):
             hidden_dim_ffn = [hidden_dim_ffn]
         self.hidden_dim_ffn = hidden_dim_ffn
-        
-        self.ffn = FeedforwardNeuralNetModel(input_dim=self.feature_concat.output_dim,
-                                             hidden_dim=self.hidden_dim_ffn,
-                                             output_dim=output_dim,
-                                             dropout_rate=dropout_rate)
 
-    def forward(
-        self,
-        path: torch.Tensor,
-        features: torch.Tensor | None = None
-    ):
+        self.ffn = FeedforwardNeuralNetModel(
+            input_dim=self.feature_concat.output_dim,
+            hidden_dim=self.hidden_dim_ffn,
+            output_dim=output_dim,
+            dropout_rate=dropout_rate,
+        )
+
+    def forward(self, path: torch.Tensor, features: torch.Tensor | None = None):
         # path has dimensions [batch, units, history, channels]
         # features has dimensions [batch, num_features+embedding_dim]
         # SWMHAU for each history window by flattening and unflattening the path
-        # first flatten the path to a three-dimensional tensor of dimensions [batch*units, history, channels]
+        # first flatten the path to a three-dimensional tensor of
+        # dimensions [batch*units, history, channels]
         out_flat = path.flatten(0, 1)
         # apply SWMHAU to out_flat
         out = self.swmhau(out_flat)
         # unflatten out to have dimensions [batch, units, hidden_dim]
         out = out.unflatten(0, (path.shape[0], path.shape[1]))
-        
+
         # apply the linear layer to the output of the SWMHAU
         out = self.linear_layer(out)
-        
+
         # apply SWMHA to linear projections of the SWMHAU outputs
         out = self.swmha(out)
-        
+
         # combine with features provided
         out = self.feature_concat(out, features)
-        
+
         # FFN
         out = self.ffn(out.float())
 

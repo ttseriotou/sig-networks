@@ -6,7 +6,9 @@
 
 Work in progress repo.
 
-First create an environment and install [`nlpsig`](https://github.com/datasig-ac-uk/nlpsig), and then install this package afterwards:
+First create an environment and install
+[`nlpsig`](https://github.com/datasig-ac-uk/nlpsig), and then install this
+package afterwards:
 
 ```
 git clone git@github.com:datasig-ac-uk/nlpsig.git
@@ -19,4 +21,5 @@ cd ../nlpsig-networks
 pip install -e .
 ```
 
-If you want to install a development version, use `pip install -e .` instead in the above.
+If you want to install a development version, use `pip install -e .` instead in
+the above.
