@@ -100,7 +100,7 @@ class SWLSTM(nn.Module):
             # obtain padding mask on the streamed signatures
             mask = obtain_signatures_mask(x)
             # obtain the length of the stream for each item in the batch dimension
-            seq_lengths = torch.sum(obtain_signatures_mask(signatures) == False, 1)
+            seq_lengths = torch.sum(mask == False, 1)
             seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
             x = x[perm_idx]
             x = torch.nn.utils.rnn.pack_padded_sequence(x, seq_lengths.cpu(), batch_first=True)
