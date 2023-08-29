@@ -155,7 +155,9 @@ class SeqSigNet(nn.Module):
             out = torch.cat((out, out_unit), dim=1)
         
         # order sequences based on sequence length of input
-        seq_lengths = torch.sum(torch.sum(torch.sum(path, 1) != 0, 1) != 0, 1)
+        # for each item in the batch dimension, find the number of non-zero windows
+        # (i.e. the number of windows that are not fully padded with zeros)
+        seq_lengths = torch.sum(torch.sum(path, (2, 3)) != 0, 1)
         seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
         out = out[perm_idx]
         out = torch.nn.utils.rnn.pack_padded_sequence(out, seq_lengths.cpu(), batch_first=True)

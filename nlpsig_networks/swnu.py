@@ -2,7 +2,7 @@ from __future__ import annotations
 from signatory import Signature, LogSignature, signature_channels, logsignature_channels, Augment
 import torch
 import torch.nn as nn
-import numpy as np
+from nlpsig_networks.utils import obtain_signatures_mask
 
 class SWLSTM(nn.Module):
     """
@@ -92,33 +92,36 @@ class SWLSTM(nn.Module):
         # take signature lifts and lstm
         for l in range(len(self.hidden_dim)):
             x = self.signature_layers[l](x)
-
-            #pad for lstm
+            # compute the length of the stream incase we need to handle empty units
             stream_dim = x.shape[1]
-            lstm_u = torch.sum(x, 2)
-            lstm_u_shift = torch.roll(lstm_u, shifts=1, dims=1)
-            lstm_u_shift[:,0] = -100
-            seq_lengths = torch.sum(torch.eq(lstm_u, lstm_u_shift) == False, 1)
-
+            
+            # padding for LSTM
+            # (i.e. find the padding mask on the streamed signatures to find the length of the stream)
+            # obtain padding mask on the streamed signatures
+            mask = obtain_signatures_mask(x)
+            # obtain the length of the stream for each item in the batch dimension
+            seq_lengths = torch.sum(obtain_signatures_mask(signatures) == False, 1)
             seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
             x = x[perm_idx]
             x = torch.nn.utils.rnn.pack_padded_sequence(x, seq_lengths.cpu(), batch_first=True)
             
-            #LSTM
+            # apply LSTM layer
             x, _ = self.lstm_layers[l](x)
             
-            #reverse soring of sequences
+            # reverse soring of sequences
             x, _ = torch.nn.utils.rnn.pad_packed_sequence(x, batch_first=True)
             inverse_perm = torch.argsort(perm_idx)
             x = x[inverse_perm]
-            #case of last LSTM being Bidirectional
+            
+            # if last layer and using BiLSTM, need to add element-wise
             if ((self.BiLSTM) & (l==(len(self.hidden_dim)-1))) :
                 # using BiLSTM on the last layer - need to add element-wise
                 # the forward and backward LSTM states
                 x = x[:, :, :self.hidden_dim[l]] + x[:, :, self.hidden_dim[l]:]
-            #handle error in cases of empty units
+            
+            # handle error in cases of empty units
             if (x.shape[1] == 1):
-                x = x.repeat(1,stream_dim,1)
+                x = x.repeat(1, stream_dim, 1)
 
         # take final signature
         out = self.signature2(x)
