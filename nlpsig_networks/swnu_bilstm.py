@@ -146,13 +146,13 @@ class SeqSigNet(nn.Module):
     ):
         # path has dimensions [batch, units, history, channels]
         # features has dimensions [batch, num_features+embedding_dim]
-        # SWNU for each history window
-        out = self.swnu(path[:,0,:,:])
-        out = out.unsqueeze(1)
-        for window in range(1, path.shape[1]):
-            out_unit = self.swnu(path[:,window,:,:])
-            out_unit = out_unit.unsqueeze(1)
-            out = torch.cat((out, out_unit), dim=1)
+        # SWNU for each history window by flattening and unflattening the path
+        # first flatten the path to a three-dimensional tensor of dimensions [batch*units, history, channels]
+        out_flat = path.flatten(0, 1)
+        # apply SWNU to out_flat
+        out = self.swnu(out_flat)
+        # unflatten out to have dimensions [batch, units, hidden_dim]
+        out = out.unflatten(0, (path.shape[0], path.shape[1]))
         
         # order sequences based on sequence length of input
         # for each item in the batch dimension, find the number of non-zero windows
