@@ -18,6 +18,7 @@ def implement_swmhau_network(
     x_data: torch.tensor | np.array,
     y_data: torch.tensor | np.array,
     input_channels: int,
+    output_channels: int,
     num_features: int,
     embedding_dim: int,
     log_signature: bool,
@@ -33,7 +34,6 @@ def implement_swmhau_network(
     gamma: float = 0.0,
     device: str | None = None,
     batch_size: int = 64,
-    output_channels: int | None = None,
     augmentation_type: str = "Conv1d",
     hidden_dim_aug: list[int] | int | None = None,
     comb_method: str = "concatenation",
@@ -53,6 +53,7 @@ def implement_swmhau_network(
     # initialise SWMHAUNetwork
     SWMHAUNetwork_args = {
         "input_channels": input_channels,
+        "output_channels": output_channels,
         "embedding_dim": embedding_dim,
         "num_features": num_features,
         "log_signature": log_signature,
@@ -62,7 +63,6 @@ def implement_swmhau_network(
         "hidden_dim_ffn": ffn_hidden_dim,
         "output_dim": output_dim,
         "dropout_rate": dropout_rate,
-        "output_channels": output_channels,
         "augmentation_type": augmentation_type,
         "hidden_dim_aug": hidden_dim_aug,
         "comb_method": comb_method
@@ -165,7 +165,6 @@ def swmhau_network_hyperparameter_search(
         standardise_method = [standardise_method]
     elif standardise_method is None:
         standardise_method = []
-
     
     # find model parameters that has the best validation
     results_df = pd.DataFrame()

@@ -33,7 +33,7 @@ class SWMHA(nn.Module):
         num_heads : int
             The number of heads in the Multihead Attention blocks.
         num_layers : int
-            The number of layers in the SWMHA.
+            The number of layers in the SWMHAU.
         """
         super(SWMHA, self).__init__()
         
@@ -134,11 +134,11 @@ class SWMHAU(nn.Module):
     def __init__(
         self,
         input_channels: int,
+        output_channels: int | None,
         log_signature: bool,
         sig_depth: int,
         num_heads: int,
         num_layers: int,
-        output_channels: int,
         augmentation_type: str = "Conv1d",
         hidden_dim_aug: list[int] | int | None = None,
     ):
@@ -149,6 +149,8 @@ class SWMHAU(nn.Module):
         ----------
         input_channels : int
             Dimension of the embeddings that will be passed in.
+        output_channels : int
+            Requested dimension of the embeddings after convolution layer.
         log_signature : bool
             Whether or not to use the log signature or standard signature.
         sig_depth : int
@@ -156,9 +158,7 @@ class SWMHAU(nn.Module):
         num_heads : int
             The number of heads in the Multihead Attention blocks.
         num_layers : int
-            The number of layers in the SWMHA.
-        output_channels : int
-            Requested dimension of the embeddings after convolution layer.
+            The number of layers in the SWMHAU.
         augmentation_type : str, optional
             Method of augmenting the path, by default "Conv1d".
             Options are:
@@ -172,11 +172,11 @@ class SWMHAU(nn.Module):
         super(SWMHAU, self).__init__()
 
         self.input_channels = input_channels
+        self.output_channels = output_channels
         self.log_signature = log_signature
         self.sig_depth = sig_depth
         self.num_heads = num_heads
         self.num_layers = num_layers
-        self.output_channels = output_channels
             
         if augmentation_type not in ["Conv1d", "signatory"]:
             raise ValueError("`augmentation_type` must be 'Conv1d' or 'signatory'.")

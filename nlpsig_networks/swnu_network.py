@@ -77,8 +77,6 @@ class SWNUNetwork(nn.Module):
             - scaled_concatenation: concatenation of single value scaled path signature and embedding vector
         """
         super(SWNUNetwork, self).__init__()
-
-        self.input_channels = input_channels
         
         self.swnu = SWNU(input_channels=input_channels,
                          output_channels=output_channels,

@@ -2,7 +2,7 @@ from __future__ import annotations
 import signatory
 import torch
 import torch.nn as nn
-from nlpsig_networks.swmhau import SWMHAU
+from nlpsig_networks.swmhau import SWMHA, SWMHAU
 from nlpsig_networks.ffn_baseline import FeedforwardNeuralNetModel
 from nlpsig_networks.feature_concatenation import FeatureConcatenation
 
@@ -15,6 +15,7 @@ class SeqSigNetAttention(nn.Module):
     def __init__(
         self, 
         input_channels: int, 
+        output_channels: int,
         num_features: int, 
         embedding_dim: int, 
         log_signature: bool,
@@ -23,8 +24,7 @@ class SeqSigNetAttention(nn.Module):
         num_layers: int,
         hidden_dim_ffn: list[int] | int,
         output_dim: int, 
-        dropout_rate: float, 
-        output_channels: int | None = None,
+        dropout_rate: float,
         augmentation_type: str = 'Conv1d', 
         hidden_dim_aug: list[int] | int | None = None,
         comb_method: str ='concatenation'):
@@ -37,7 +37,9 @@ class SeqSigNetAttention(nn.Module):
         Parameters
         ----------
         input_channels : int
-            Dimension of the (dimensonally reduced) history embeddings that will be passed in. 
+            Dimension of the (dimensonally reduced) history embeddings that will be passed in.
+        output_channels : int
+            Requested dimension of the embeddings after convolution layer.
         num_features : int
             Number of time features to add to FFN input. If none, set to zero.
         embedding_dim: int
@@ -49,16 +51,13 @@ class SeqSigNetAttention(nn.Module):
         num_heads : int
             The number of heads in the Multihead Attention blocks.
         num_layers : int
-            The number of layers in the SWMHA.
+            The number of layers in the SWMHAU.
         hidden_dim_ffn : list[int] | int
             Dimension of the hidden layers in the FFN.
         output_dim : int
             Dimension of the output layer in the FFN.
         dropout_rate : float
             Dropout rate in the FFN.
-        output_channels : int | None, optional
-            Requested dimension of the embeddings after convolution layer.
-            If None, will be set to the last item in `hidden_dim`, by default None.
         augmentation_type : str, optional
             Method of augmenting the path, by default "Conv1d".
             Options are:
@@ -78,10 +77,9 @@ class SeqSigNetAttention(nn.Module):
             - scaled_concatenation: concatenation of single value scaled path signature and embedding vector
         """
 
-        super(SeqSigNet, self).__init__()
-        
-        self.input_channels = input_channels
+        super(SeqSigNetAttention, self).__init__()
 
+        # SWMHAU applied to the input (the unit includes the convolution layer)
         self.swmhau = SWMHAU(
             input_channels=input_channels,
             output_channels=output_channels,
@@ -93,12 +91,16 @@ class SeqSigNetAttention(nn.Module):
             hidden_dim_aug=hidden_dim_aug
         )
         
-        # multi-head attention layer to process output of the units
-        # create Multihead Attention layers
-        self.mha = nn.MultiheadAttention(
-            embed_dim=self.swmha.signature_terms,
-            num_heads=self.num_heads,
-            batch_first=True
+        # linear layer to project the output of the SWMHAU to the output dimension of the convolution
+        self.linear_layer = nn.Linear(self.swmhau.swmha.signature_terms, output_channels)
+        
+        # SWMHA applied to the output of the linear layer
+        self.swmha = SWMHA(
+            input_size=output_channels,
+            log_signature=log_signature,
+            sig_depth=sig_depth,
+            num_heads=num_heads,
+            num_layers=1,
         )
         
         # determining how to concatenate features to the SWMHAU features
@@ -106,7 +108,7 @@ class SeqSigNetAttention(nn.Module):
         self.num_features = num_features
         self.comb_method = comb_method
         self.feature_concat = FeatureConcatenation(
-            input_dim=self.swmha.signature_terms,
+            input_dim=self.swmhau.swmha.signature_terms,
             num_features=self.num_features,
             embedding_dim=self.embedding_dim,
             comb_method=self.comb_method,
@@ -138,10 +140,11 @@ class SeqSigNetAttention(nn.Module):
         # unflatten out to have dimensions [batch, units, hidden_dim]
         out = out.unflatten(0, (path.shape[0], path.shape[1]))
         
-        # apply MHA to the outputs of SWMHAU
-        # obtain padding mask on the outputs of SWMHAU
-        mask = obtain_signatures_mask(out)
-        out = self.mha(out, out, out, key_padding_mask=mask)[0]
+        # apply the linear layer to the output of the SWMHAU
+        out = self.linear_layer(out)
+        
+        # apply SWMHA to linear projections of the SWMHAU outputs
+        out = self.swmha(out)
         
         # combine with features provided
         out = self.feature_concat(out, features)

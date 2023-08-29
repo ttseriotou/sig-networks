@@ -14,6 +14,7 @@ class SWMHAUNetwork(nn.Module):
     def __init__(
         self,
         input_channels: int,
+        output_channels: int,
         num_features: int,
         embedding_dim: int,
         log_signature: bool,
@@ -23,7 +24,6 @@ class SWMHAUNetwork(nn.Module):
         hidden_dim_ffn: list[int] | int,
         output_dim: int,
         dropout_rate: float,
-        output_channels: int | None = None,
         augmentation_type: str = "Conv1d",
         hidden_dim_aug: list[int] | int | None = None,
         comb_method: str = "concatenation",
@@ -35,6 +35,8 @@ class SWMHAUNetwork(nn.Module):
         ----------
         input_channels : int
             Dimension of the embeddings that will be passed in.
+        output_channels : int | None, optional
+            Requested dimension of the embeddings after convolution layer.
         num_features : int
             Number of time features to add to FFN input. If none, set to zero.
         embedding_dim : int
@@ -46,16 +48,13 @@ class SWMHAUNetwork(nn.Module):
         num_heads : int
             The number of heads in the Multihead Attention blocks.
         num_layers : int
-            The number of layers in the SWMHA.
+            The number of layers in the SWMHAU.
         hidden_dim_ffn : list[int] | int
             Dimension of the hidden layers in the FFN.
         output_dim : int
             Dimension of the output layer in the FFN.
         dropout_rate : float
             Dropout rate in the FFN.
-        output_channels : int | None, optional
-            Requested dimension of the embeddings after convolution layer.
-            If None, will be set to the last item in `hidden_dim`, by default None.
         augmentation_type : str, optional
             Method of augmenting the path, by default "Conv1d".
             Options are:
@@ -75,8 +74,6 @@ class SWMHAUNetwork(nn.Module):
             - scaled_concatenation: concatenation of single value scaled path signature and embedding vector
         """
         super(SWMHAUNetwork, self).__init__()
-
-        self.input_channels = input_channels
         
         self.swmhau = SWMHAU(input_channels=input_channels,
                              output_channels=output_channels,

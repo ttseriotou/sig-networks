@@ -84,8 +84,6 @@ class SeqSigNet(nn.Module):
         """
 
         super(SeqSigNet, self).__init__()
-        
-        self.input_channels = input_channels
 
         self.swnu = SWNU(input_channels=input_channels,
                          output_channels=output_channels,
