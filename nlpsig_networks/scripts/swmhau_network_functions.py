@@ -201,11 +201,11 @@ def swmhau_network_hyperparameter_search(
                                         if verbose:
                                             print("\n" + "!" * 50)
                                             print(f"output_channels: {output_channels} | "
-                                                f"ffn_hidden_dim: {ffn_hidden_dim} | "
-                                                f"sig_depth: {sig_depth} | "
-                                                f"num_heads: {num_heads} | "
-                                                f"dropout: {dropout} | "
-                                                f"learning_rate: {lr}")
+                                                  f"ffn_hidden_dim: {ffn_hidden_dim} | "
+                                                  f"sig_depth: {sig_depth} | "
+                                                  f"num_heads: {num_heads} | "
+                                                  f"dropout: {dropout} | "
+                                                  f"learning_rate: {lr}")
                                             
                                         scores = []
                                         verbose_model = verbose

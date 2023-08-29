@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import nlpsig
 from nlpsig_networks.pytorch_utils import _get_timestamp, SaveBestModel, set_seed
-from nlpsig_networks.seqsignet_bilstm import SeqSigNet
+from nlpsig_networks.seqsignet_attention import SeqSigNetAttention
+from nlpsig_networks.scripts.seqsignet_functions import obtain_SeqSigNet_input
 from nlpsig_networks.scripts.implement_model import implement_model
 from typing import Iterable
 import torch
@@ -11,71 +12,8 @@ import pandas as pd
 from tqdm.auto import tqdm
 import os
 
-
-def obtain_SeqSigNet_input(
-    method: str,
-    dimension: int,
-    df: pd.DataFrame,
-    id_column: str,
-    label_column: str,
-    embeddings: np.array,
-    shift: int,
-    window_size: int,
-    n: int,
-    features: list[str] | str | None = None,
-    standardise_method: list[str] | str | None = None,
-    include_features_in_path: bool = False,
-    seed: int = 42,
-    path_indices: list | np.array | None = None
-) -> dict[str, dict[str, torch.tensor] | int | None]:
-    # compute length of path required 
-    k = shift * n + (window_size - shift)
-    print(f"given shift {shift}, window size {window_size} and n {n}: "
-          f"history length = {k}")
     
-    # use nlpsig to construct the path as a numpy array
-    # first define how we construct the path
-    path_specifics = {"pad_by": "history",
-                      "zero_padding": True,
-                      "method": "k_last",
-                      "k": k,
-                      "features": features,
-                      "standardise_method": standardise_method,
-                      "embeddings": "dim_reduced",
-                      "include_current_embedding": True,
-                      "pad_from_below": True}
-    
-    # first perform dimension reduction on embeddings
-    if dimension == embeddings.shape[1]:
-        # no need to perform dimensionality reduction
-        embeddings_reduced = embeddings
-    else:
-        reduction = nlpsig.DimReduce(method=method,
-                                     n_components=dimension)
-        embeddings_reduced = reduction.fit_transform(embeddings,
-                                                     random_state=seed)
-    
-    # obtain path by using PrepareData class and .pad method
-    paths = nlpsig.PrepareData(df,
-                               id_column=id_column,
-                               label_column=label_column,
-                               embeddings=embeddings,
-                               embeddings_reduced=embeddings_reduced)
-    paths.pad(**path_specifics)
-    
-    return paths.get_torch_path_for_SeqSigNet(
-        shift=shift,
-        window_size=window_size,
-        n=n,
-        include_features_in_path=include_features_in_path,
-        include_features_in_input=True,
-        include_embedding_in_input=True,
-        reduced_embeddings=False,
-        path_indices=path_indices,
-    )
-    
-    
-def implement_seqsignet(
+def implement_seqsignet_attention(
     num_epochs: int,
     x_data: np.array | torch.Tensor | dict[str, np.array | torch.Tensor],
     y_data: torch.tensor | np.array,
@@ -84,11 +22,10 @@ def implement_seqsignet(
     embedding_dim: int,
     log_signature: bool,
     sig_depth: int,
-    swnu_hidden_dim: list[int] | int,
-    lstm_hidden_dim: int,
+    num_heads: int,
+    num_layers: int,
     ffn_hidden_dim: list[int] | int,
     output_dim: int,
-    BiLSTM: bool,
     dropout_rate: float,
     learning_rate: float,
     seed: int,
@@ -109,32 +46,31 @@ def implement_seqsignet(
     verbose_training: bool = False,
     verbose_results: bool = False,
     verbose_model: bool = False,
-) -> tuple[SeqSigNet, pd.DataFrame]:
+) -> tuple[SeqSigNetAttention, pd.DataFrame]:
     # set seed
     set_seed(seed)
     
-    # initialise SeqSigNet
-    SeqSigNet_args = {
+    # initialise SeqSigNetAttention
+    SeqSigNetAttention_args = {
         "input_channels": input_channels,
         "num_features": num_features,
         "embedding_dim": embedding_dim,
         "log_signature": log_signature,
         "sig_depth": sig_depth,
-        "hidden_dim_swnu": swnu_hidden_dim,
-        "hidden_dim_lstm": lstm_hidden_dim,
+        "num_heads": num_heads,
+        "num_layers": num_layers,
         "hidden_dim_ffn": ffn_hidden_dim,
         "output_dim": output_dim,
         "dropout_rate": dropout_rate,
         "output_channels": output_channels,
         "augmentation_type": augmentation_type,
         "hidden_dim_aug": hidden_dim_aug,
-        "BiLSTM": BiLSTM,
         "comb_method": comb_method
     }
-    seqsignet_model = SeqSigNet(**SeqSigNet_args)
+    seqsignet_attention_model = SeqSigNetAttention(**SeqSigNetAttention_args)
     
     if verbose_model:
-        print(seqsignet_model)
+        print(seqsignet_attention_model)
     
     # convert data to torch tensors
     # deal with case if x_data is a dictionary
@@ -152,7 +88,7 @@ def implement_seqsignet(
     if not isinstance(y_data, torch.Tensor):
         y_data = torch.tensor(y_data)
     
-    return implement_model(model=seqsignet_model,
+    return implement_model(model=seqsignet_attention_model,
                            num_epochs=num_epochs,
                            x_data=x_data,
                            y_data=y_data,
@@ -172,7 +108,7 @@ def implement_seqsignet(
                            verbose_results=verbose_results)
 
 
-def seqsignet_hyperparameter_search(
+def seqsignet_attention_hyperparameter_search(
     num_epochs: int,
     df: pd.DataFrame,
     id_column: str,
@@ -186,12 +122,11 @@ def seqsignet_hyperparameter_search(
     dim_reduce_methods: list[str],
     dimensions: list[int],
     log_signature: bool,
-    swnu_hidden_dim_sizes_and_sig_depths: list[tuple[int, list[int] | list[list[int]]]],
-    lstm_hidden_dim_sizes: list[int],
+    swmhau_parameters: list[tuple[int, int, int]],
+    num_layers: list[int],
     ffn_hidden_dim_sizes: list[int] | list[list[int]],
     dropout_rates: list[float],
     learning_rates: list[float],
-    BiLSTM: bool,
     seeds : list[int],
     loss: str,
     gamma: float = 0.0,
@@ -219,7 +154,7 @@ def seqsignet_hyperparameter_search(
         raise ValueError("validation_metric must be either 'loss', 'accuracy' or 'f1'")
     
     # initialise SaveBestModel class
-    model_output = f"best_seqsignet_model_{_get_timestamp()}.pkl"
+    model_output = f"best_seqsignet_attention_model_{_get_timestamp()}.pkl"
     save_best_model = SaveBestModel(metric=validation_metric,
                                     output=model_output,
                                     verbose=verbose)
@@ -262,26 +197,25 @@ def seqsignet_hyperparameter_search(
                 path_indices=path_indices
             )
     
-            for swnu_hidden_dim, sig_depth in tqdm(swnu_hidden_dim_sizes_and_sig_depths):
-                for lstm_hidden_dim in tqdm(lstm_hidden_dim_sizes):
+            for output_channels, sig_depth, num_heads in tqdm(swmhau_parameters):
+                for n_layers in tqdm(num_layers):
                     for ffn_hidden_dim in tqdm(ffn_hidden_dim_sizes):
                         for output_channels in tqdm(conv_output_channels):
                             for dropout in tqdm(dropout_rates):
                                 for lr in tqdm(learning_rates):
                                     if verbose:
                                         print("\n" + "!" * 50)
-                                        print(f"swnu_hidden_dim: {swnu_hidden_dim} | "
-                                              f"lstm_hidden_dim: {lstm_hidden_dim} | "
+                                        print(f"output_channels: {output_channels} | "
                                               f"ffn_hidden_dim: {ffn_hidden_dim} | "
                                               f"sig_depth: {sig_depth} | "
-                                              f"output_channels: {output_channels} | "
+                                              f"num_heads: {num_heads} | "
                                               f"dropout: {dropout} | "
                                               f"learning_rate: {lr}")
                                         
                                     scores = []
                                     verbose_model = verbose
                                     for seed in seeds:
-                                        _, results = implement_seqsignet(
+                                        _, results = implement_seqsignet_attention(
                                             num_epochs=num_epochs,
                                             x_data=input["x_data"],
                                             y_data=y_data,
@@ -291,11 +225,10 @@ def seqsignet_hyperparameter_search(
                                             num_features=input["num_features"],
                                             log_signature=log_signature,
                                             sig_depth=sig_depth,
-                                            swnu_hidden_dim=swnu_hidden_dim,
-                                            lstm_hidden_dim=lstm_hidden_dim,
+                                            num_heads=num_heads,
+                                            num_layers=n_layers,
                                             ffn_hidden_dim=ffn_hidden_dim,
                                             output_dim=output_dim,
-                                            BiLSTM=BiLSTM,
                                             dropout_rate=dropout,
                                             learning_rate=lr,
                                             seed=seed,
@@ -337,13 +270,12 @@ def seqsignet_hyperparameter_search(
                                         results["embedding_dim"] = input["embedding_dim"]
                                         results["num_features"] = input["num_features"]
                                         results["log_signature"] = log_signature
-                                        results["swnu_hidden_dim"] = [tuple(swnu_hidden_dim) for _ in range(len(results.index))]
-                                        results["lstm_hidden_dim"] = lstm_hidden_dim
+                                        results["num_heads"] = num_heads
+                                        results["num_layers"] = n_layers
                                         results["ffn_hidden_dim"] = [tuple(ffn_hidden_dim) for _ in range(len(results.index))]
                                         results["dropout_rate"] = dropout
                                         results["learning_rate"] = lr
                                         results["seed"] = seed
-                                        results["BiLSTM"] = BiLSTM
                                         results["loss_function"] = loss
                                         results["gamma"] = gamma
                                         results["k_fold"] = k_fold
@@ -383,12 +315,11 @@ def seqsignet_hyperparameter_search(
                                                         "embedding_dim": input["embedding_dim"],
                                                         "num_features": input["num_features"],
                                                         "log_signature": log_signature,
-                                                        "swnu_hidden_dim": swnu_hidden_dim,
-                                                        "lstm_hidden_dim": lstm_hidden_dim,
+                                                        "num_heads": num_heads,
+                                                            "num_layers": n_layers,
                                                         "ffn_hidden_dim": ffn_hidden_dim,
                                                         "dropout_rate": dropout,
                                                         "learning_rate": lr,
-                                                        "BiLSTM": BiLSTM,
                                                         "augmentation_type": augmentation_type,
                                                         "hidden_dim_aug": hidden_dim_aug,
                                                         "comb_method": comb_method,
@@ -419,7 +350,7 @@ def seqsignet_hyperparameter_search(
     test_scores = []
     test_results_df = pd.DataFrame()
     for seed in seeds:
-        _, test_results = implement_seqsignet(
+        _, test_results = implement_seqsignet_attention(
             num_epochs=num_epochs,
             x_data=input["x_data"],
             y_data=y_data,
@@ -430,10 +361,9 @@ def seqsignet_hyperparameter_search(
             num_features=input["num_features"],
             log_signature=log_signature,
             output_dim=output_dim,
-            swnu_hidden_dim=checkpoint["extra_info"]["swnu_hidden_dim"],
-            lstm_hidden_dim=checkpoint["extra_info"]["lstm_hidden_dim"],
+            num_heads=checkpoint["extra_info"]["num_heads"],
+            num_layers=checkpoint["extra_info"]["num_layers"],
             ffn_hidden_dim=checkpoint["extra_info"]["ffn_hidden_dim"],
-            BiLSTM=checkpoint["extra_info"]["BiLSTM"],
             dropout_rate=checkpoint["extra_info"]["dropout_rate"],
             learning_rate=checkpoint["extra_info"]["learning_rate"],
             seed=seed,
@@ -475,15 +405,13 @@ def seqsignet_hyperparameter_search(
         test_results["embedding_dim"] = input["embedding_dim"]
         test_results["num_features"] = input["num_features"]
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
-        test_results["swnu_hidden_dim"] = [tuple(checkpoint["extra_info"]["swnu_hidden_dim"])
-                                           for _ in range(len(test_results.index))]
-        test_results["lstm_hidden_dim"] = checkpoint["extra_info"]["lstm_hidden_dim"]
+        test_results["num_heads"] = checkpoint["extra_info"]["num_heads"]
+        test_results["num_layers"] = checkpoint["extra_info"]["num_layers"]
         test_results["ffn_hidden_dim"] = [tuple(checkpoint["extra_info"]["ffn_hidden_dim"])
                                           for _ in range(len(test_results.index))]
         test_results["dropout_rate"] = checkpoint["extra_info"]["dropout_rate"]
         test_results["learning_rate"] = checkpoint["extra_info"]["learning_rate"]
         test_results["seed"] = seed
-        test_results["BiLSTM"] = checkpoint["extra_info"]["BiLSTM"]
         test_results["loss_function"] = loss
         test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
