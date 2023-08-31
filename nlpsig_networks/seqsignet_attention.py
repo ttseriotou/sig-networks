@@ -5,7 +5,8 @@ import torch.nn as nn
 
 from nlpsig_networks.feature_concatenation import FeatureConcatenation
 from nlpsig_networks.ffn_baseline import FeedforwardNeuralNetModel
-from nlpsig_networks.swmhau import SWMHA, SWMHAU
+from nlpsig_networks.swmhau import SWMHAU
+from nlpsig_networks.utils import obtain_signatures_mask
 
 
 class SeqSigNetAttention(nn.Module):
@@ -99,19 +100,12 @@ class SeqSigNetAttention(nn.Module):
             hidden_dim_aug=hidden_dim_aug,
         )
 
-        # linear layer to project the output of the SWMHAU to
-        # the output dimension of the convolution
-        self.linear_layer = nn.Linear(
-            self.swmhau.swmha.signature_terms, output_channels
-        )
-
-        # SWMHA applied to the output of the linear layer
-        self.swmha = SWMHA(
-            input_size=output_channels,
-            log_signature=log_signature,
-            sig_depth=sig_depth,
-            num_heads=num_heads,
-            num_layers=1,
+        # multi-head attention layer to process output of the units
+        # create Multihead Attention layers
+        self.mha = nn.MultiheadAttention(
+            embed_dim=self.swmha.signature_terms,
+            num_heads=self.num_heads,
+            batch_first=True,
         )
 
         # determining how to concatenate features to the SWMHAU features
@@ -119,7 +113,7 @@ class SeqSigNetAttention(nn.Module):
         self.num_features = num_features
         self.comb_method = comb_method
         self.feature_concat = FeatureConcatenation(
-            input_dim=self.swmhau.swmha.signature_terms,
+            input_dim=self.swmha.signature_terms,
             num_features=self.num_features,
             embedding_dim=self.embedding_dim,
             comb_method=self.comb_method,
@@ -150,11 +144,16 @@ class SeqSigNetAttention(nn.Module):
         # unflatten out to have dimensions [batch, units, hidden_dim]
         out = out.unflatten(0, (path.shape[0], path.shape[1]))
 
-        # apply the linear layer to the output of the SWMHAU
-        out = self.linear_layer(out)
+        # apply MHA to the output of the SWMHAUs
+        # obtain padding mask on the outputs of SWMHAU
+        mask = obtain_signatures_mask(out)
+        out = self.mha(out, out, out, key_padding_mask=mask)[0]
 
-        # apply SWMHA to linear projections of the SWMHAU outputs
-        out = self.swmha(out)
+        # take average of the non-padded outputs in dimension 1
+        # to get tensor of dimensions [batch, hidden_dim]
+        feat = torch.sum(out * mask.unsqueeze(-1), dim=1)
+        denom = torch.sum(mask, -1, keepdim=True)
+        out = feat / denom
 
         # combine with features provided
         out = self.feature_concat(out, features)
