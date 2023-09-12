@@ -1,17 +1,17 @@
-import nlpsig
-import pickle
 import os
-from load_anno_mi import anno_mi
+import pickle
 
+import nlpsig
+from load_anno_mi import anno_mi
 
 ##################################################
 ########## Obtain SBERT embeddings for AnnoMI ####
 ##################################################
 
 # initialise the Text Encoder
-sentence_encoder = nlpsig.SentenceEncoder(df=anno_mi,
-                                          feature_name="utterance_text",
-                                          model_name="all-MiniLM-L12-v2")
+sentence_encoder = nlpsig.SentenceEncoder(
+    df=anno_mi, feature_name="utterance_text", model_name="all-MiniLM-L12-v2"
+)
 
 # load in pretrained model
 sentence_encoder.load_pretrained_model()

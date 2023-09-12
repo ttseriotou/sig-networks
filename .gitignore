@@ -3,4 +3,5 @@
 **__pycache__
 *.npy
 *.pkl
-paths.py
+Reddit_MoC/
+Talklife_MoC/

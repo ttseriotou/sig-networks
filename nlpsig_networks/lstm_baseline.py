@@ -1,22 +1,22 @@
 from __future__ import annotations
+
 import torch
 import torch.nn as nn
-import numpy as np
 
 
 class LSTMModel(nn.Module):
     """
     LSTM network model for  classification.
     """
-    
+
     def __init__(
         self,
-        input_dim: int, 
+        input_dim: int,
         hidden_dim: int,
         num_layers: int,
         bidirectional: bool,
         output_dim: int,
-        dropout_rate: float
+        dropout_rate: float,
     ):
         """
         LSTM network model for  classification.
@@ -38,17 +38,19 @@ class LSTMModel(nn.Module):
             Probability of dropout.
         """
         super(LSTMModel, self).__init__()
-        
+
         self.hidden_dim = hidden_dim
         self.bidirectional = bidirectional
-        self.lstm = nn.LSTM(input_size=input_dim,
-                            hidden_size=hidden_dim,
-                            num_layers=num_layers,
-                            batch_first=True,
-                            bidirectional=bidirectional)
+        self.lstm = nn.LSTM(
+            input_size=input_dim,
+            hidden_size=hidden_dim,
+            num_layers=num_layers,
+            batch_first=True,
+            bidirectional=bidirectional,
+        )
         self.dropout = nn.Dropout(dropout_rate)
         self.fc = nn.Linear(hidden_dim, output_dim)
-    
+
     def forward(self, x: torch.Tensor):
         # x has dimensions [batch, length of signal, channels]
         # assume empty units are padded using zeros and padded from below
@@ -60,21 +62,19 @@ class LSTMModel(nn.Module):
 
         # pack a tensor containing padded sequences of variable length
         x_pack = torch.nn.utils.rnn.pack_padded_sequence(
-            x,
-            lengths=seq_lengths.cpu(),
-            batch_first=True
+            x, lengths=seq_lengths.cpu(), batch_first=True
         )
-        
+
         # pass through LSTM
         out, (out_h, _) = self.lstm(x_pack)
-        
+
         # obtain last hidden states
         if self.bidirectional:
             # element-wise add if have BiLSTM
             out = out_h[-1, :, :] + out_h[-2, :, :]
         else:
             out = out_h[-1, :, :]
-        
+
         # need to reverse the original indexing afterwards
         inverse_perm = torch.argsort(perm_idx)
         out = out[inverse_perm]
@@ -82,5 +82,5 @@ class LSTMModel(nn.Module):
         # readout
         out = self.dropout(out)
         out = self.fc(out.float())
-        
+
         return out

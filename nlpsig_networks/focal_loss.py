@@ -86,19 +86,22 @@ class ClassBalanced_FocalLoss(nn.Module):
         self.samples_per_cls = torch.Tensor([y_list.count(i) for i in set(y_list)])
 
     def forward(self, logits: torch.Tensor, labels: torch.Tensor):
-        """Compute the Class Balanced Loss between `logits` and the ground truth `labels`.
+        """
+        Compute the Class Balanced Loss between `logits` and
+        the ground truth `labels`.
         Class Balanced Loss: ((1-beta)/(1-beta^n))*Loss(labels, logits)
         where Loss is one of the standard losses used for Neural Networks.
+
         Args:
-        labels: A int tensor of size [batch].
-        logits: A float tensor of size [batch, no_of_classes].
-        samples_per_cls: A python list of size [no_of_classes].
-        no_of_classes: total number of classes. int
-        loss_type: string. One of "sigmoid", "focal", "softmax".
-        beta: float. Hyperparameter for Class balanced loss.
-        gamma: float. Hyperparameter for Focal loss.
+          labels: A int tensor of size [batch].
+          logits: A float tensor of size [batch, no_of_classes].
+          samples_per_cls: A python list of size [no_of_classes].
+          no_of_classes: total number of classes. int
+          loss_type: string. One of "sigmoid", "focal", "softmax".
+          beta: float. Hyperparameter for Class balanced loss.
+          gamma: float. Hyperparameter for Focal loss.
         Returns:
-        cb_loss: A float tensor representing class balanced loss
+          cb_loss: A float tensor representing class balanced loss
         """
         effective_num = 1.0 - np.power(self.beta, self.samples_per_cls)
         weights = (1.0 - self.beta) / np.array(effective_num)
@@ -119,10 +122,12 @@ class ClassBalanced_FocalLoss(nn.Module):
     def focal_loss(
         self, labels: torch.Tensor, logits: torch.Tensor, alpha: torch.Tensor
     ):
-        """Compute the focal loss between `logits` and the ground truth `labels`.
+        """
+        Compute the focal loss between `logits` and the ground truth `labels`.
         Focal loss = -alpha_t * (1-pt)^gamma * log(pt)
         where pt is the probability of being classified to the true class.
         pt = p (if true class), otherwise pt = 1 - p. p = sigmoid(logit).
+
         Args:
           labels: A float tensor of size [batch, num_classes].
           logits: A float tensor of size [batch, num_classes].
