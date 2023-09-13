@@ -5,7 +5,6 @@ import torch
 import paths
 
 sys.path.append("..")# Adds higher directory to python modules path
-import utils.data_handler as data_handler
 
 ##################################################
 ########## Load in data ##########################
