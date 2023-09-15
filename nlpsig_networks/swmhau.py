@@ -136,8 +136,14 @@ class SWMHA(nn.Module):
 
         # take signature lifts and lstm
         for layer in range(self.num_layers):
+            # reverse the posts in dim 1 (i.e. the time dimension)
+            # as the first post is the most recent
+            # (or padding if the path is shorter than the window size)
+            x = torch.flip(x, dims=[1])
             # apply signature with lift layer
             x = self.signature_layers[layer](x)
+            # reverse the posts back to the original order
+            x = torch.flip(x, dims=[1])
             # obtain padding mask on the streamed signatures
             mask = obtain_signatures_mask(x)
             # apply MHA layer to the signatures

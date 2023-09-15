@@ -109,7 +109,15 @@ class SWLSTM(nn.Module):
 
         # take signature lifts and lstm
         for layer in range(len(self.hidden_dim)):
+            # reverse the posts in dim 1 (i.e. the time dimension)
+            # as the first post is the most recent
+            # (or padding if the path is shorter than the window size)
+            x = torch.flip(x, dims=[1])
+            # apply signature with lift layer
             x = self.signature_layers[layer](x)
+            # reverse the posts back to the original order
+            x = torch.flip(x, dims=[1])
+
             # compute the length of the stream incase we need to handle empty units
             stream_dim = x.shape[1]
 
