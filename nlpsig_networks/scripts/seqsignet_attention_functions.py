@@ -138,6 +138,7 @@ def seqsignet_attention_hyperparameter_search(
     features: list[str] | str | None = None,
     standardise_method: list[str] | str | None = None,
     include_features_in_path: bool = False,
+    include_features_in_input: bool = False,
     augmentation_type: str = "Conv1d",
     hidden_dim_aug: list[int] | int | None = None,
     comb_method: str = "concatenation",
@@ -192,6 +193,7 @@ def seqsignet_attention_hyperparameter_search(
                 features=features,
                 standardise_method=standardise_method,
                 include_features_in_path=include_features_in_path,
+                include_features_in_input=include_features_in_input,
                 path_indices=path_indices,
             )
 
@@ -270,6 +272,9 @@ def seqsignet_attention_hyperparameter_search(
                                     results[
                                         "include_features_in_path"
                                     ] = include_features_in_path
+                                    results[
+                                        "include_features_in_input"
+                                    ] = include_features_in_input
                                     results["embedding_dim"] = input["embedding_dim"]
                                     results["num_features"] = input["num_features"]
                                     results["log_signature"] = log_signature
@@ -331,6 +336,9 @@ def seqsignet_attention_hyperparameter_search(
                                         "include_features_in_path": (
                                             include_features_in_path
                                         ),
+                                        "include_features_in_input": (
+                                            include_features_in_input
+                                        ),
                                         "embedding_dim": input["embedding_dim"],
                                         "num_features": input["num_features"],
                                         "log_signature": log_signature,
@@ -364,6 +372,7 @@ def seqsignet_attention_hyperparameter_search(
         features=checkpoint["extra_info"]["features"],
         standardise_method=checkpoint["extra_info"]["standardise_method"],
         include_features_in_path=checkpoint["extra_info"]["include_features_in_path"],
+        include_features_in_input=checkpoint["extra_info"]["include_features_in_input"],
         path_indices=path_indices,
     )
 
@@ -422,6 +431,7 @@ def seqsignet_attention_hyperparameter_search(
         test_results["features"] = [features]
         test_results["standardise_method"] = [standardise_method]
         test_results["include_features_in_path"] = include_features_in_path
+        test_results["include_features_in_input"] = include_features_in_input
         test_results["embedding_dim"] = input["embedding_dim"]
         test_results["num_features"] = input["num_features"]
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
