@@ -108,7 +108,7 @@ class SeqSigNetAttention(nn.Module):
         # multi-head attention layer to process output of the units
         # create Multihead Attention layers
         self.mha = nn.MultiheadAttention(
-            embed_dim=self.swmha.signature_terms,
+            embed_dim=self.swmhau.swmha.signature_terms,
             num_heads=self.num_heads,
             batch_first=True,
         )
@@ -118,7 +118,7 @@ class SeqSigNetAttention(nn.Module):
         self.num_features = num_features
         self.comb_method = comb_method
         self.feature_concat = FeatureConcatenation(
-            input_dim=self.swmha.signature_terms,
+            input_dim=self.swmhau.swmha.signature_terms,
             num_features=self.num_features,
             embedding_dim=self.embedding_dim,
             comb_method=self.comb_method,
