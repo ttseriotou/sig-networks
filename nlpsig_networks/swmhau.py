@@ -89,8 +89,6 @@ class SWMHA(nn.Module):
                 nn.MultiheadAttention(
                     embed_dim=self.signature_terms,
                     num_heads=self.num_heads,
-                    # do not include bias in input/output projection layers
-                    bias=False,
                     batch_first=True,
                 )
                 for _ in range(self.num_layers)
