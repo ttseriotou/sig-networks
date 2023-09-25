@@ -25,6 +25,7 @@ class SWNUNetwork(nn.Module):
         hidden_dim_ffn: list[int] | int,
         output_dim: int,
         dropout_rate: float,
+        reverse_path: bool = False,
         output_channels: int | None = None,
         augmentation_type: str = "Conv1d",
         hidden_dim_aug: list[int] | int | None = None,
@@ -54,6 +55,9 @@ class SWNUNetwork(nn.Module):
             Dimension of the output layer in the FFN.
         dropout_rate : float
             Dropout rate in the FFN.
+        reverse_path : bool, optional
+            Whether or not to reverse the path before passing it through the
+            signature layers, by default False.
         output_channels : int | None, optional
             Requested dimension of the embeddings after convolution layer.
             If None, will be set to the last item in `hidden_dim`, by default None.
@@ -89,9 +93,10 @@ class SWNUNetwork(nn.Module):
             log_signature=log_signature,
             sig_depth=sig_depth,
             hidden_dim=hidden_dim_swnu,
+            reverse_path=reverse_path,
+            BiLSTM=BiLSTM,
             augmentation_type=augmentation_type,
             hidden_dim_aug=hidden_dim_aug,
-            BiLSTM=BiLSTM,
         )
 
         # signature without lift (for passing into FFN)

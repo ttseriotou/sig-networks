@@ -27,6 +27,7 @@ class SeqSigNetAttention(nn.Module):
         hidden_dim_ffn: list[int] | int,
         output_dim: int,
         dropout_rate: float,
+        reverse_path: bool = False,
         augmentation_type: str = "Conv1d",
         hidden_dim_aug: list[int] | int | None = None,
         comb_method: str = "concatenation",
@@ -64,6 +65,9 @@ class SeqSigNetAttention(nn.Module):
             Dimension of the output layer in the FFN.
         dropout_rate : float
             Dropout rate in the FFN.
+        reverse_path : bool, optional
+            Whether or not to reverse the path before passing it through the
+            signature layers, by default False.
         augmentation_type : str, optional
             Method of augmenting the path, by default "Conv1d".
             Options are:
@@ -96,6 +100,7 @@ class SeqSigNetAttention(nn.Module):
             sig_depth=sig_depth,
             num_heads=num_heads,
             num_layers=num_layers,
+            reverse_path=reverse_path,
             augmentation_type=augmentation_type,
             hidden_dim_aug=hidden_dim_aug,
         )
