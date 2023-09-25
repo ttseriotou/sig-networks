@@ -109,7 +109,7 @@ class SeqSigNetAttention(nn.Module):
         # create Multihead Attention layers
         self.mha = nn.MultiheadAttention(
             embed_dim=self.swmhau.swmha.signature_terms,
-            num_heads=self.num_heads,
+            num_heads=self.swmhau.num_heads,
             batch_first=True,
         )
 
