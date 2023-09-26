@@ -217,31 +217,8 @@ class SaveBestModel:
             Any extra information that you want to save to this model
             (if it does get saved), by default None.
         """
-        if self.metric == "loss":
-            # metric lower better
-            if current_train_metric is not None:
-                valid_condition = current_valid_metric <= self.best_valid_metric
-                train_condition = current_train_metric < self.best_train_metric
-            condition = current_valid_metric < self.best_valid_metric
-        elif self.metric in ["accuracy", "f1"]:
-            # metric higher better
-            if current_train_metric is not None:
-                valid_condition = current_valid_metric >= self.best_valid_metric
-                train_condition = current_train_metric > self.best_train_metric
-            condition = current_valid_metric > self.best_valid_metric
-        if current_train_metric is not None:
-            # we save if either the validation metric is strictly better
-            # or the valid metric is at least as good as the best,
-            # but metric on train has improved
-            condition = condition or (valid_condition and train_condition)
-        if condition:
-            self.best_valid_metric = current_valid_metric
-            if self.verbose:
-                print(f"New best validation metric: {self.best_valid_metric}")
-                if epoch is not None:
-                    print(
-                        f"Saving best model/info at epoch: {epoch+1} to {self.output}"
-                    )
+        # if self.output does not exist yet, save the model there
+        if not os.path.exists(self.output):
             torch.save(
                 obj={
                     "model_state_dict": model.state_dict()
@@ -252,6 +229,45 @@ class SaveBestModel:
                 },
                 f=self.output,
             )
+        else:
+            if self.metric == "loss":
+                # metric lower better
+                if current_train_metric is not None:
+                    valid_condition = current_valid_metric <= self.best_valid_metric
+                    train_condition = current_train_metric < self.best_train_metric
+                condition = current_valid_metric < self.best_valid_metric
+            elif self.metric in ["accuracy", "f1"]:
+                # metric higher better
+                if current_train_metric is not None:
+                    valid_condition = current_valid_metric >= self.best_valid_metric
+                    train_condition = current_train_metric > self.best_train_metric
+                condition = current_valid_metric > self.best_valid_metric
+            if current_train_metric is not None:
+                # we save if either the validation metric is strictly better
+                # or the valid metric is at least as good as the best,
+                # but metric on train has improved
+                condition = condition or (valid_condition and train_condition)
+
+            # save model if condition is true
+            if condition:
+                self.best_valid_metric = current_valid_metric
+                if self.verbose:
+                    print(f"New best validation metric: {self.best_valid_metric}")
+                    if epoch is not None:
+                        print(
+                            "Saving best model/info at epoch: "
+                            f"{epoch+1} to {self.output}"
+                        )
+                torch.save(
+                    obj={
+                        "model_state_dict": model.state_dict()
+                        if model is not None
+                        else None,
+                        "epoch": epoch + 1 if epoch is not None else epoch,
+                        "extra_info": extra_info,
+                    },
+                    f=self.output,
+                )
 
 
 def validation_pytorch(
