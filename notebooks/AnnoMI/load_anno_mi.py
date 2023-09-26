@@ -16,6 +16,9 @@ anno_mi = anno_mi.drop_duplicates(subset=["transcript_id", "utterance_id"])
 anno_mi["datetime"] = pd.to_datetime(anno_mi["timestamp"])
 # drop columns for video title and video url
 anno_mi = anno_mi.drop(columns=["video_title", "video_url"])
+# binary feature for determining if therapist or client speaking
+# using 1 for client, -1 for therapist (not using 0 since we use 0 for padding)
+anno_mi["speaker"] = anno_mi["interlocutor"].apply(lambda x: 1 if x=="client" else -1)
 
 ##################################################
 ########## Client talk type ######################

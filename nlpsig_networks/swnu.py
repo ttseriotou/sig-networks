@@ -24,6 +24,7 @@ class SWLSTM(nn.Module):
         log_signature: bool,
         sig_depth: int,
         hidden_dim: list[int] | int,
+        reverse_path: bool = False,
         BiLSTM: bool = False,
     ):
         """
@@ -40,6 +41,9 @@ class SWLSTM(nn.Module):
             The depth to truncate the path signature at.
         hidden_dim : list[int] | int
             Dimensions of the hidden layers in the LSTM blocks in the SWLSTM.
+        reverse_path : bool, optional
+            Whether or not to reverse the path before passing it through the
+            signature layers, by default False.
         BiLSTM : bool, optional
             Whether or not a birectional LSTM is used for the final SWLSTM block,
             by default False (unidirectional LSTM is used in this case).
@@ -52,6 +56,7 @@ class SWLSTM(nn.Module):
         if isinstance(hidden_dim, int):
             hidden_dim = [hidden_dim]
         self.hidden_dim = hidden_dim
+        self.reverse_path = reverse_path
         self.BiLSTM = BiLSTM
 
         # creating expanding window signature layers and corresponding LSTM layers
@@ -109,7 +114,19 @@ class SWLSTM(nn.Module):
 
         # take signature lifts and lstm
         for layer in range(len(self.hidden_dim)):
+            if self.reverse_path:
+                # reverse the posts in dim 1 (i.e. the time dimension)
+                # as the first post is the most recent
+                # (or padding if the path is shorter than the window size)
+                x = torch.flip(x, dims=[1])
+
+            # apply signature with lift layer
             x = self.signature_layers[layer](x)
+
+            if self.reverse_path:
+                # reverse the posts back to the original order
+                x = torch.flip(x, dims=[1])
+
             # compute the length of the stream incase we need to handle empty units
             stream_dim = x.shape[1]
 
@@ -163,10 +180,11 @@ class SWNU(nn.Module):
         log_signature: bool,
         sig_depth: int,
         hidden_dim: list[int] | int,
+        reverse_path: bool = False,
+        BiLSTM: bool = False,
         output_channels: int | None = None,
         augmentation_type: str = "Conv1d",
         hidden_dim_aug: list[int] | int | None = None,
-        BiLSTM: bool = False,
     ):
         """
         Signature Window Network Unit (SWNU) class (using LSTM blocks).
@@ -184,6 +202,12 @@ class SWNU(nn.Module):
         output_channels : int | None, optional
             Requested dimension of the embeddings after convolution layer.
             If None, will be set to the last item in `hidden_dim`, by default None.
+        reverse_path : bool, optional
+            Whether or not to reverse the path before passing it through the
+            signature layers, by default False.
+        BiLSTM : bool, optional
+            Whether or not a birectional LSTM is used,
+            by default False (unidirectional LSTM is used in this case).
         augmentation_type : str, optional
             Method of augmenting the path, by default "Conv1d".
             Options are:
@@ -193,9 +217,6 @@ class SWNU(nn.Module):
             Dimensions of the hidden layers in the augmentation layer.
             Passed into `Augment` class from `signatory` package if
             `augmentation_type='signatory'`, by default None.
-        BiLSTM : bool, optional
-            Whether or not a birectional LSTM is used,
-            by default False (unidirectional LSTM is used in this case).
         """
         super(SWNU, self).__init__()
 
@@ -220,6 +241,7 @@ class SWNU(nn.Module):
         elif hidden_dim_aug is None:
             hidden_dim_aug = []
         self.hidden_dim_aug = hidden_dim_aug
+        self.reverse_path = reverse_path
         self.BiLSTM = BiLSTM
 
         # convolution
@@ -251,6 +273,7 @@ class SWNU(nn.Module):
             hidden_dim=self.hidden_dim,
             log_signature=self.log_signature,
             sig_depth=self.sig_depth,
+            reverse_path=self.reverse_path,
             BiLSTM=self.BiLSTM,
         )
 

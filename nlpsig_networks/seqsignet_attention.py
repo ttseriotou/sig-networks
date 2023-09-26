@@ -27,6 +27,7 @@ class SeqSigNetAttention(nn.Module):
         hidden_dim_ffn: list[int] | int,
         output_dim: int,
         dropout_rate: float,
+        reverse_path: bool = False,
         augmentation_type: str = "Conv1d",
         hidden_dim_aug: list[int] | int | None = None,
         comb_method: str = "concatenation",
@@ -64,6 +65,9 @@ class SeqSigNetAttention(nn.Module):
             Dimension of the output layer in the FFN.
         dropout_rate : float
             Dropout rate in the FFN.
+        reverse_path : bool, optional
+            Whether or not to reverse the path before passing it through the
+            signature layers, by default False.
         augmentation_type : str, optional
             Method of augmenting the path, by default "Conv1d".
             Options are:
@@ -96,6 +100,7 @@ class SeqSigNetAttention(nn.Module):
             sig_depth=sig_depth,
             num_heads=num_heads,
             num_layers=num_layers,
+            reverse_path=reverse_path,
             augmentation_type=augmentation_type,
             hidden_dim_aug=hidden_dim_aug,
         )
@@ -103,8 +108,8 @@ class SeqSigNetAttention(nn.Module):
         # multi-head attention layer to process output of the units
         # create Multihead Attention layers
         self.mha = nn.MultiheadAttention(
-            embed_dim=self.swmha.signature_terms,
-            num_heads=self.num_heads,
+            embed_dim=self.swmhau.swmha.signature_terms,
+            num_heads=self.swmhau.num_heads,
             batch_first=True,
         )
 
@@ -113,7 +118,7 @@ class SeqSigNetAttention(nn.Module):
         self.num_features = num_features
         self.comb_method = comb_method
         self.feature_concat = FeatureConcatenation(
-            input_dim=self.swmha.signature_terms,
+            input_dim=self.swmhau.swmha.signature_terms,
             num_features=self.num_features,
             embedding_dim=self.embedding_dim,
             comb_method=self.comb_method,

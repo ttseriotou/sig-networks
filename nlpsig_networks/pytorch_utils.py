@@ -14,12 +14,15 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau, _LRScheduler
 from torch.optim.optimizer import Optimizer
 from torch.utils.data.dataloader import DataLoader
 from tqdm.auto import tqdm
+from uuid import uuid4
 
 from nlpsig_networks.focal_loss import ClassBalanced_FocalLoss, FocalLoss
 
 
-def _get_timestamp():
+def _get_timestamp(add_runid: bool = True) -> str:
     timestamp = str(datetime.datetime.now())
+    if add_runid:
+        timestamp += f"_{str(uuid4())}"
     return timestamp.replace(" ", "-").replace(":", "-").replace(".", "-")
 
 

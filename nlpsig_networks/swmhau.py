@@ -25,6 +25,7 @@ class SWMHA(nn.Module):
         sig_depth: int,
         num_heads: int,
         num_layers: int,
+        reverse_path: bool = False,
     ):
         """
         Applies a multi-layer Signature & Multihead Attention block (SWMHA) to
@@ -42,6 +43,9 @@ class SWMHA(nn.Module):
             The number of heads in the Multihead Attention blocks.
         num_layers : int
             The number of layers in the SWMHAU.
+        reverse_path : bool, optional
+            Whether or not to reverse the path before passing it through the
+            signature layers, by default False.
         """
         super(SWMHA, self).__init__()
 
@@ -61,6 +65,7 @@ class SWMHA(nn.Module):
         self.sig_depth = sig_depth
         self.num_heads = num_heads
         self.num_layers = num_layers
+        self.reverse_path = reverse_path
 
         # create signature layers
         if self.log_signature:
@@ -134,8 +139,19 @@ class SWMHA(nn.Module):
 
         # take signature lifts and lstm
         for layer in range(self.num_layers):
+            if self.reverse_path:
+                # reverse the posts in dim 1 (i.e. the time dimension)
+                # as the first post is the most recent
+                # (or padding if the path is shorter than the window size)
+                x = torch.flip(x, dims=[1])
+
             # apply signature with lift layer
             x = self.signature_layers[layer](x)
+
+            if self.reverse_path:
+                # reverse the posts back to the original order
+                x = torch.flip(x, dims=[1])
+
             # obtain padding mask on the streamed signatures
             mask = obtain_signatures_mask(x)
             # apply MHA layer to the signatures
@@ -164,6 +180,7 @@ class SWMHAU(nn.Module):
         sig_depth: int,
         num_heads: int,
         num_layers: int,
+        reverse_path: bool = False,
         augmentation_type: str = "Conv1d",
         hidden_dim_aug: list[int] | int | None = None,
     ):
@@ -184,6 +201,9 @@ class SWMHAU(nn.Module):
             The number of heads in the Multihead Attention blocks.
         num_layers : int
             The number of layers in the SWMHAU.
+        reverse_path : bool, optional
+            Whether or not to reverse the path before passing it through the
+            signature layers, by default False.
         augmentation_type : str, optional
             Method of augmenting the path, by default "Conv1d".
             Options are:
@@ -202,6 +222,7 @@ class SWMHAU(nn.Module):
         self.sig_depth = sig_depth
         self.num_heads = num_heads
         self.num_layers = num_layers
+        self.reverse_path = reverse_path
 
         if augmentation_type not in ["Conv1d", "signatory"]:
             raise ValueError("`augmentation_type` must be 'Conv1d' or 'signatory'.")
@@ -243,6 +264,7 @@ class SWMHAU(nn.Module):
             sig_depth=self.sig_depth,
             num_heads=self.num_heads,
             num_layers=self.num_layers,
+            reverse_path=self.reverse_path,
         )
 
     def forward(self, x: torch.Tensor):
