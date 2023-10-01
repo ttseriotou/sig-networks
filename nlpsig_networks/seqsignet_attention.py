@@ -109,9 +109,10 @@ class SeqSigNetAttention(nn.Module):
         )
 
         # BiLSTM that processes the outputs from SWNUs for each window
+        self.hidden_dim_lstm = hidden_dim_lstm
         self.lstm_sig = nn.LSTM(
             input_size=self.swmhau.swmha.signature_terms,
-            hidden_size=hidden_dim_lstm,
+            hidden_size=self.hidden_dim_lstm,
             num_layers=1,
             batch_first=True,
             bidirectional=True,
@@ -122,7 +123,7 @@ class SeqSigNetAttention(nn.Module):
         self.num_features = num_features
         self.comb_method = comb_method
         self.feature_concat = FeatureConcatenation(
-            input_dim=self.swmhau.swmha.signature_terms,
+            input_dim=self.hidden_dim_lstm,
             num_features=self.num_features,
             embedding_dim=self.embedding_dim,
             comb_method=self.comb_method,
