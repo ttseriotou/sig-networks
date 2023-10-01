@@ -6,7 +6,6 @@ import torch.nn as nn
 from nlpsig_networks.feature_concatenation import FeatureConcatenation
 from nlpsig_networks.ffn_baseline import FeedforwardNeuralNetModel
 from nlpsig_networks.swmhau import SWMHAU
-from nlpsig_networks.utils import obtain_signatures_mask
 
 
 class SeqSigNetAttention(nn.Module):
@@ -24,6 +23,7 @@ class SeqSigNetAttention(nn.Module):
         sig_depth: int,
         num_heads: int,
         num_layers: int,
+        hidden_dim_lstm: int,
         hidden_dim_ffn: list[int] | int,
         output_dim: int,
         dropout_rate: float,
@@ -59,6 +59,9 @@ class SeqSigNetAttention(nn.Module):
             The number of heads in the Multihead Attention blocks.
         num_layers : int
             The number of layers in the SWMHAU.
+        hidden_dim_lstm : int
+            Dimensions of the hidden layers in the final BiLSTM applied to the output
+            of the SWNU units.
         hidden_dim_ffn : list[int] | int
             Dimension of the hidden layers in the FFN.
         output_dim : int
@@ -105,12 +108,13 @@ class SeqSigNetAttention(nn.Module):
             hidden_dim_aug=hidden_dim_aug,
         )
 
-        # multi-head attention layer to process output of the units
-        # create Multihead Attention layers
-        self.mha = nn.MultiheadAttention(
-            embed_dim=self.swmhau.swmha.signature_terms,
-            num_heads=self.swmhau.num_heads,
+        # BiLSTM that processes the outputs from SWNUs for each window
+        self.lstm_sig = nn.LSTM(
+            input_size=self.swmhau.swmha.signature_terms,
+            hidden_size=hidden_dim_lstm,
+            num_layers=1,
             batch_first=True,
+            bidirectional=True,
         )
 
         # determining how to concatenate features to the SWMHAU features
@@ -149,16 +153,23 @@ class SeqSigNetAttention(nn.Module):
         # unflatten out to have dimensions [batch, units, hidden_dim]
         out = out.unflatten(0, (path.shape[0], path.shape[1]))
 
-        # apply MHA to the output of the SWMHAUs
-        # obtain padding mask on the outputs of SWMHAU
-        mask = obtain_signatures_mask(out)
-        out = self.mha(out, out, out, key_padding_mask=mask)[0]
+        # order sequences based on sequence length of input
+        # for each item in the batch dimension, find the number of non-zero windows
+        # (i.e. the number of windows that are not fully padded with zeros)
+        seq_lengths = torch.sum(torch.sum(path, (2, 3)) != 0, 1)
+        seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
+        out = out[perm_idx]
+        out = torch.nn.utils.rnn.pack_padded_sequence(
+            out, seq_lengths.cpu(), batch_first=True
+        )
 
-        # take average of the non-padded outputs in dimension 1
-        # to get tensor of dimensions [batch, hidden_dim]
-        feat = torch.sum(out * mask.unsqueeze(-1), dim=1)
-        denom = torch.sum(mask, -1, keepdim=True)
-        out = feat / denom
+        # BiLSTM that combines all deepsignet windows together
+        _, (out, _) = self.lstm_sig(out)
+        out = out[-1, :, :] + out[-2, :, :]
+
+        # reverse sequence padding
+        inverse_perm = torch.argsort(perm_idx)
+        out = out[inverse_perm]
 
         # combine with features provided
         out = self.feature_concat(out, features)

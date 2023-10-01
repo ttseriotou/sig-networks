@@ -26,6 +26,7 @@ def implement_seqsignet_attention(
     sig_depth: int,
     num_heads: int,
     num_layers: int,
+    lstm_hidden_dim: int,
     ffn_hidden_dim: list[int] | int,
     output_dim: int,
     dropout_rate: float,
@@ -61,6 +62,7 @@ def implement_seqsignet_attention(
         "sig_depth": sig_depth,
         "num_heads": num_heads,
         "num_layers": num_layers,
+        "hidden_dim_lstm": lstm_hidden_dim,
         "hidden_dim_ffn": ffn_hidden_dim,
         "output_dim": output_dim,
         "dropout_rate": dropout_rate,
@@ -127,6 +129,7 @@ def seqsignet_attention_hyperparameter_search(
     log_signature: bool,
     swmhau_parameters: list[tuple[int, int, int]],
     num_layers: list[int],
+    lstm_hidden_dim_sizes: list[int],
     ffn_hidden_dim_sizes: list[int] | list[list[int]],
     dropout_rates: list[float],
     learning_rates: list[float],
@@ -199,159 +202,174 @@ def seqsignet_attention_hyperparameter_search(
 
             for output_channels, sig_depth, num_heads in tqdm(swmhau_parameters):
                 for n_layers in tqdm(num_layers):
-                    for ffn_hidden_dim in tqdm(ffn_hidden_dim_sizes):
-                        for dropout in tqdm(dropout_rates):
-                            for lr in tqdm(learning_rates):
-                                if verbose:
-                                    print("\n" + "!" * 50)
-                                    print(
-                                        f"output_channels: {output_channels} | "
-                                        f"ffn_hidden_dim: {ffn_hidden_dim} | "
-                                        f"sig_depth: {sig_depth} | "
-                                        f"num_heads: {num_heads} | "
-                                        f"dropout: {dropout} | "
-                                        f"learning_rate: {lr}"
-                                    )
+                    for lstm_hidden_dim in tqdm(lstm_hidden_dim_sizes):
+                        for ffn_hidden_dim in tqdm(ffn_hidden_dim_sizes):
+                            for dropout in tqdm(dropout_rates):
+                                for lr in tqdm(learning_rates):
+                                    if verbose:
+                                        print("\n" + "!" * 50)
+                                        print(
+                                            f"output_channels: {output_channels} | "
+                                            f"lstm_hidden_dim: {lstm_hidden_dim} |"
+                                            f"ffn_hidden_dim: {ffn_hidden_dim} | "
+                                            f"sig_depth: {sig_depth} | "
+                                            f"num_heads: {num_heads} | "
+                                            f"dropout: {dropout} | "
+                                            f"learning_rate: {lr}"
+                                        )
 
-                                scores = []
-                                verbose_model = verbose
-                                for seed in seeds:
-                                    _, results = implement_seqsignet_attention(
-                                        num_epochs=num_epochs,
-                                        x_data=input["x_data"],
-                                        y_data=y_data,
-                                        input_channels=input["input_channels"],
-                                        output_channels=output_channels,
-                                        embedding_dim=input["embedding_dim"],
-                                        num_features=input["num_features"],
-                                        log_signature=log_signature,
-                                        sig_depth=sig_depth,
-                                        num_heads=num_heads,
-                                        num_layers=n_layers,
-                                        ffn_hidden_dim=ffn_hidden_dim,
-                                        output_dim=output_dim,
-                                        dropout_rate=dropout,
-                                        learning_rate=lr,
-                                        seed=seed,
-                                        loss=loss,
-                                        gamma=gamma,
-                                        device=device,
-                                        batch_size=batch_size,
-                                        augmentation_type=augmentation_type,
-                                        hidden_dim_aug=hidden_dim_aug,
-                                        comb_method=comb_method,
-                                        data_split_seed=data_split_seed,
-                                        split_ids=split_ids,
-                                        split_indices=split_indices,
-                                        k_fold=k_fold,
-                                        n_splits=n_splits,
-                                        patience=patience,
-                                        verbose_training=False,
-                                        verbose_results=verbose,
-                                        verbose_model=verbose_model,
-                                    )
-                                    # save metric that we want to validate on
-                                    # take mean of performance on the folds
-                                    # if k_fold=False, return performance for seed
-                                    scores.append(
-                                        results[f"valid_{validation_metric}"].mean()
-                                    )
+                                    scores = []
+                                    verbose_model = verbose
+                                    for seed in seeds:
+                                        _, results = implement_seqsignet_attention(
+                                            num_epochs=num_epochs,
+                                            x_data=input["x_data"],
+                                            y_data=y_data,
+                                            input_channels=input["input_channels"],
+                                            output_channels=output_channels,
+                                            embedding_dim=input["embedding_dim"],
+                                            num_features=input["num_features"],
+                                            log_signature=log_signature,
+                                            sig_depth=sig_depth,
+                                            num_heads=num_heads,
+                                            num_layers=n_layers,
+                                            lstm_hidden_dim=lstm_hidden_dim,
+                                            ffn_hidden_dim=ffn_hidden_dim,
+                                            output_dim=output_dim,
+                                            dropout_rate=dropout,
+                                            learning_rate=lr,
+                                            seed=seed,
+                                            loss=loss,
+                                            gamma=gamma,
+                                            device=device,
+                                            batch_size=batch_size,
+                                            augmentation_type=augmentation_type,
+                                            hidden_dim_aug=hidden_dim_aug,
+                                            comb_method=comb_method,
+                                            data_split_seed=data_split_seed,
+                                            split_ids=split_ids,
+                                            split_indices=split_indices,
+                                            k_fold=k_fold,
+                                            n_splits=n_splits,
+                                            patience=patience,
+                                            verbose_training=False,
+                                            verbose_results=verbose,
+                                            verbose_model=verbose_model,
+                                        )
+                                        # save metric that we want to validate on
+                                        # take mean of performance on the folds
+                                        # if k_fold=False, return performance for seed
+                                        scores.append(
+                                            results[f"valid_{validation_metric}"].mean()
+                                        )
 
-                                    # concatenate to results dataframe
-                                    results["k"] = k
-                                    results["shift"] = shift
-                                    results["window_size"] = window_size
-                                    results["n"] = n
-                                    results["dimensions"] = dimension
-                                    results["sig_depth"] = sig_depth
-                                    results["method"] = method
-                                    results["input_channels"] = input["input_channels"]
-                                    results["output_channels"] = output_channels
-                                    results["features"] = [features]
-                                    results["standardise_method"] = [standardise_method]
-                                    results[
-                                        "include_features_in_path"
-                                    ] = include_features_in_path
-                                    results[
-                                        "include_features_in_input"
-                                    ] = include_features_in_input
-                                    results["embedding_dim"] = input["embedding_dim"]
-                                    results["num_features"] = input["num_features"]
-                                    results["log_signature"] = log_signature
-                                    results["num_heads"] = num_heads
-                                    results["num_layers"] = n_layers
-                                    results["ffn_hidden_dim"] = [
-                                        tuple(ffn_hidden_dim)
-                                        for _ in range(len(results.index))
-                                    ]
-                                    results["dropout_rate"] = dropout
-                                    results["learning_rate"] = lr
-                                    results["seed"] = seed
-                                    results["loss_function"] = loss
-                                    results["gamma"] = gamma
-                                    results["k_fold"] = k_fold
-                                    results["n_splits"] = n_splits if k_fold else None
-                                    results["augmentation_type"] = augmentation_type
-                                    results["hidden_dim_aug"] = (
-                                        [
-                                            tuple(hidden_dim_aug)
+                                        # concatenate to results dataframe
+                                        results["k"] = k
+                                        results["shift"] = shift
+                                        results["window_size"] = window_size
+                                        results["n"] = n
+                                        results["dimensions"] = dimension
+                                        results["sig_depth"] = sig_depth
+                                        results["method"] = method
+                                        results["input_channels"] = input[
+                                            "input_channels"
+                                        ]
+                                        results["output_channels"] = output_channels
+                                        results["features"] = [features]
+                                        results["standardise_method"] = [
+                                            standardise_method
+                                        ]
+                                        results[
+                                            "include_features_in_path"
+                                        ] = include_features_in_path
+                                        results[
+                                            "include_features_in_input"
+                                        ] = include_features_in_input
+                                        results["embedding_dim"] = input[
+                                            "embedding_dim"
+                                        ]
+                                        results["num_features"] = input["num_features"]
+                                        results["log_signature"] = log_signature
+                                        results["num_heads"] = num_heads
+                                        results["num_layers"] = n_layers
+                                        results["lstm_hidden_dim"] = lstm_hidden_dim
+                                        results["ffn_hidden_dim"] = [
+                                            tuple(ffn_hidden_dim)
                                             for _ in range(len(results.index))
                                         ]
-                                        if hidden_dim_aug is not None
-                                        else None
+                                        results["dropout_rate"] = dropout
+                                        results["learning_rate"] = lr
+                                        results["seed"] = seed
+                                        results["loss_function"] = loss
+                                        results["gamma"] = gamma
+                                        results["k_fold"] = k_fold
+                                        results["n_splits"] = (
+                                            n_splits if k_fold else None
+                                        )
+                                        results["augmentation_type"] = augmentation_type
+                                        results["hidden_dim_aug"] = (
+                                            [
+                                                tuple(hidden_dim_aug)
+                                                for _ in range(len(results.index))
+                                            ]
+                                            if hidden_dim_aug is not None
+                                            else None
+                                        )
+                                        results["comb_method"] = comb_method
+                                        results["batch_size"] = batch_size
+                                        results["model_id"] = model_id
+                                        results_df = pd.concat([results_df, results])
+
+                                        # don't continue printing out the model
+                                        verbose_model = False
+
+                                    model_id += 1
+                                    scores_mean = sum(scores) / len(scores)
+
+                                    if verbose:
+                                        print(
+                                            f"- average{' (kfold)' if k_fold else ''} "
+                                            f"(validation) metric score: {scores_mean}"
+                                        )
+                                        print(
+                                            f"scores for the different seeds: {scores}"
+                                        )
+                                    # save best model according to averaged metric
+                                    # over the different seeds
+                                    save_best_model(
+                                        current_valid_metric=scores_mean,
+                                        extra_info={
+                                            "k": k,
+                                            "shift": shift,
+                                            "window_size": window_size,
+                                            "n": n,
+                                            "dimensions": dimension,
+                                            "sig_depth": sig_depth,
+                                            "method": method,
+                                            "input_channels": input["input_channels"],
+                                            "output_channels": output_channels,
+                                            "features": features,
+                                            "standardise_method": standardise_method,
+                                            "include_features_in_path": (
+                                                include_features_in_path
+                                            ),
+                                            "include_features_in_input": (
+                                                include_features_in_input
+                                            ),
+                                            "embedding_dim": input["embedding_dim"],
+                                            "num_features": input["num_features"],
+                                            "log_signature": log_signature,
+                                            "num_heads": num_heads,
+                                            "num_layers": n_layers,
+                                            "lstm_hidden_dim": lstm_hidden_dim,
+                                            "ffn_hidden_dim": ffn_hidden_dim,
+                                            "dropout_rate": dropout,
+                                            "learning_rate": lr,
+                                            "augmentation_type": augmentation_type,
+                                            "hidden_dim_aug": hidden_dim_aug,
+                                            "comb_method": comb_method,
+                                        },
                                     )
-                                    results["comb_method"] = comb_method
-                                    results["batch_size"] = batch_size
-                                    results["model_id"] = model_id
-                                    results_df = pd.concat([results_df, results])
-
-                                    # don't continue printing out the model
-                                    verbose_model = False
-
-                                model_id += 1
-                                scores_mean = sum(scores) / len(scores)
-
-                                if verbose:
-                                    print(
-                                        f"- average{' (kfold)' if k_fold else ''} "
-                                        f"(validation) metric score: {scores_mean}"
-                                    )
-                                    print(f"scores for the different seeds: {scores}")
-                                # save best model according to averaged metric
-                                # over the different seeds
-                                save_best_model(
-                                    current_valid_metric=scores_mean,
-                                    extra_info={
-                                        "k": k,
-                                        "shift": shift,
-                                        "window_size": window_size,
-                                        "n": n,
-                                        "dimensions": dimension,
-                                        "sig_depth": sig_depth,
-                                        "method": method,
-                                        "input_channels": input["input_channels"],
-                                        "output_channels": output_channels,
-                                        "features": features,
-                                        "standardise_method": standardise_method,
-                                        "include_features_in_path": (
-                                            include_features_in_path
-                                        ),
-                                        "include_features_in_input": (
-                                            include_features_in_input
-                                        ),
-                                        "embedding_dim": input["embedding_dim"],
-                                        "num_features": input["num_features"],
-                                        "log_signature": log_signature,
-                                        "num_heads": num_heads,
-                                        "num_layers": n_layers,
-                                        "ffn_hidden_dim": ffn_hidden_dim,
-                                        "dropout_rate": dropout,
-                                        "learning_rate": lr,
-                                        "augmentation_type": augmentation_type,
-                                        "hidden_dim_aug": hidden_dim_aug,
-                                        "comb_method": comb_method,
-                                    },
-                                )
 
     checkpoint = torch.load(f=model_output)
     if verbose:
@@ -392,6 +410,7 @@ def seqsignet_attention_hyperparameter_search(
             output_dim=output_dim,
             num_heads=checkpoint["extra_info"]["num_heads"],
             num_layers=checkpoint["extra_info"]["num_layers"],
+            lstm_hidden_dim=checkpoint["extra_info"]["lstm_hidden_dim"],
             ffn_hidden_dim=checkpoint["extra_info"]["ffn_hidden_dim"],
             dropout_rate=checkpoint["extra_info"]["dropout_rate"],
             learning_rate=checkpoint["extra_info"]["learning_rate"],
@@ -437,6 +456,7 @@ def seqsignet_attention_hyperparameter_search(
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
         test_results["num_heads"] = checkpoint["extra_info"]["num_heads"]
         test_results["num_layers"] = checkpoint["extra_info"]["num_layers"]
+        test_results["lstm_hidden_dim"] = checkpoint["extra_info"]["lstm_hidden_dim"]
         test_results["ffn_hidden_dim"] = [
             tuple(checkpoint["extra_info"]["ffn_hidden_dim"])
             for _ in range(len(test_results.index))
