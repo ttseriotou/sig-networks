@@ -14,7 +14,7 @@ from nlpsig_networks.scripts.seqsignet_functions import obtain_SeqSigNet_input
 from nlpsig_networks.seqsignet_full_attention import SeqSigNetFullAttention
 
 
-def implement_seqsignet_attention(
+def implement_seqsignet_full_attention(
     num_epochs: int,
     x_data: np.array | torch.Tensor | dict[str, np.array | torch.Tensor],
     y_data: torch.tensor | np.array,
@@ -68,10 +68,12 @@ def implement_seqsignet_attention(
         "hidden_dim_aug": hidden_dim_aug,
         "comb_method": comb_method,
     }
-    seqsignet_attention_model = SeqSigNetFullAttention(**SeqSigNetFullAttention_args)
+    seqsignet_full_attention_model = SeqSigNetFullAttention(
+        **SeqSigNetFullAttention_args
+    )
 
     if verbose_model:
-        print(seqsignet_attention_model)
+        print(seqsignet_full_attention_model)
 
     # convert data to torch tensors
     # deal with case if x_data is a dictionary
@@ -90,7 +92,7 @@ def implement_seqsignet_attention(
         y_data = torch.tensor(y_data)
 
     return implement_model(
-        model=seqsignet_attention_model,
+        model=seqsignet_full_attention_model,
         num_epochs=num_epochs,
         x_data=x_data,
         y_data=y_data,
@@ -111,7 +113,7 @@ def implement_seqsignet_attention(
     )
 
 
-def seqsignet_attention_hyperparameter_search(
+def seqsignet_full_attention_hyperparameter_search(
     num_epochs: int,
     df: pd.DataFrame,
     id_column: str,
@@ -157,7 +159,7 @@ def seqsignet_attention_hyperparameter_search(
         raise ValueError("validation_metric must be either 'loss', 'accuracy' or 'f1'")
 
     # initialise SaveBestModel class
-    model_output = f"best_seqsignet_attention_model_{_get_timestamp()}.pkl"
+    model_output = f"best_seqsignet_full_attention_model_{_get_timestamp()}.pkl"
     save_best_model = SaveBestModel(
         metric=validation_metric, output=model_output, verbose=verbose
     )
@@ -216,7 +218,7 @@ def seqsignet_attention_hyperparameter_search(
                                 scores = []
                                 verbose_model = verbose
                                 for seed in seeds:
-                                    _, results = implement_seqsignet_attention(
+                                    _, results = implement_seqsignet_full_attention(
                                         num_epochs=num_epochs,
                                         x_data=input["x_data"],
                                         y_data=y_data,
@@ -379,7 +381,7 @@ def seqsignet_attention_hyperparameter_search(
     test_scores = []
     test_results_df = pd.DataFrame()
     for seed in seeds:
-        _, test_results = implement_seqsignet_attention(
+        _, test_results = implement_seqsignet_full_attention(
             num_epochs=num_epochs,
             x_data=input["x_data"],
             y_data=y_data,
