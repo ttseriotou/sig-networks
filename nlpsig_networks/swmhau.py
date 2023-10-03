@@ -10,6 +10,7 @@ from signatory import (
     signature_channels,
 )
 
+from nlpsig_networks.ffn_baseline import FeedforwardNeuralNetModel
 from nlpsig_networks.utils import obtain_signatures_mask
 
 
@@ -25,6 +26,8 @@ class SWMHA(nn.Module):
         sig_depth: int,
         num_heads: int,
         num_layers: int,
+        dropout_rate: float,
+        multiple_ffn: bool = True,
         reverse_path: bool = False,
     ):
         """
@@ -43,6 +46,13 @@ class SWMHA(nn.Module):
             The number of heads in the Multihead Attention blocks.
         num_layers : int
             The number of layers in the SWMHAU.
+        dropout_rate : float
+            Probability of dropout in linear layer.
+        multiple_ffn : bool, optional
+            Whether or not to use different FFN components at each layer,
+            i.e. each SWMHA block has it's own FFN, or to use a single
+            shared FFN across the layers in the SWMHA, by default True.
+            See "One Wide Feedforward is All You Need" by Pires et al. 2023.
         reverse_path : bool, optional
             Whether or not to reverse the path before passing it through the
             signature layers, by default False.
@@ -95,14 +105,27 @@ class SWMHA(nn.Module):
             ]
         )
 
-        # create linear layers to project the output of
+        # create FFN layer(s) to project the output of
         # the MHA layers down to original input size
-        self.linear_layers = nn.ModuleList(
-            [
-                nn.Linear(self.signature_terms, self.input_size)
-                for _ in range(self.num_layers)
-            ]
-        )
+        self.multiple_ffn = multiple_ffn
+        if self.multiple_ffn:
+            self.ffn_layers = nn.ModuleList(
+                [
+                    FeedforwardNeuralNetModel(
+                        input_dim=self.signature_terms,
+                        hidden_dim=2 * self.signature_terms,
+                        output_dim=self.input_size,
+                        dropout_rate=dropout_rate,
+                    )
+                ]
+            )
+        else:
+            self.ffn_layers = FeedforwardNeuralNetModel(
+                input_dim=self.signature_terms,
+                hidden_dim=4 * self.signature_terms,
+                output_dim=self.input_size,
+                dropout_rate=dropout_rate,
+            )
 
         # layer norm
         self.norm = nn.LayerNorm(self.signature_terms)
@@ -156,10 +179,16 @@ class SWMHA(nn.Module):
             mask = obtain_signatures_mask(x)
             # apply MHA layer to the signatures
             attention_out = self.mha_layers[layer](x, x, x, key_padding_mask=mask)[0]
+
             # apply layer norm and residual connection
             x = self.norm(x + attention_out)
-            # apply linear layer
-            x = self.linear_layers[layer](x)
+
+            # apply FFN layer to the signatures to decrease
+            # the dimension back to the original
+            if self.multiple_ffn:
+                x = self.ffn_layers[layer](x)
+            else:
+                x = self.ffn_layers(x)
 
         # take final signature
         out = self.signature2(x)
@@ -180,6 +209,8 @@ class SWMHAU(nn.Module):
         sig_depth: int,
         num_heads: int,
         num_layers: int,
+        dropout_rate: float,
+        multiple_ffn: bool = True,
         reverse_path: bool = False,
         augmentation_type: str = "Conv1d",
         hidden_dim_aug: list[int] | int | None = None,
@@ -201,6 +232,13 @@ class SWMHAU(nn.Module):
             The number of heads in the Multihead Attention blocks.
         num_layers : int
             The number of layers in the SWMHAU.
+        dropout_rate : float
+            Probability of dropout in linear layer.
+        multiple_ffn : bool, optional
+            Whether or not to use different FFN components at each layer,
+            i.e. each SWMHA block has it's own FFN, or to use a single
+            shared FFN across the layers in the SWMHA, by default True.
+            See "One Wide Feedforward is All You Need" by Pires et al. 2023.
         reverse_path : bool, optional
             Whether or not to reverse the path before passing it through the
             signature layers, by default False.
@@ -222,6 +260,8 @@ class SWMHAU(nn.Module):
         self.sig_depth = sig_depth
         self.num_heads = num_heads
         self.num_layers = num_layers
+        self.dropout_rate = dropout_rate
+        self.multiple_ffn = multiple_ffn
         self.reverse_path = reverse_path
 
         if augmentation_type not in ["Conv1d", "signatory"]:
@@ -264,6 +304,8 @@ class SWMHAU(nn.Module):
             sig_depth=self.sig_depth,
             num_heads=self.num_heads,
             num_layers=self.num_layers,
+            dropout_rate=self.dropout_rate,
+            multiple_ffn=self.multiple_ffn,
             reverse_path=self.reverse_path,
         )
 

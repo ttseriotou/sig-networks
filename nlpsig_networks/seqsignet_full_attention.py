@@ -27,6 +27,7 @@ class SeqSigNetFullAttention(nn.Module):
         hidden_dim_ffn: list[int] | int,
         output_dim: int,
         dropout_rate: float,
+        multiple_ffn: bool = True,
         reverse_path: bool = False,
         augmentation_type: str = "Conv1d",
         hidden_dim_aug: list[int] | int | None = None,
@@ -64,7 +65,12 @@ class SeqSigNetFullAttention(nn.Module):
         output_dim : int
             Dimension of the output layer in the FFN.
         dropout_rate : float
-            Dropout rate in the FFN.
+            Dropout rate in the FFN and SWMHAU.
+        multiple_ffn : bool, optional
+            Whether or not to use different FFN components at each layer of the SWMHAU,
+            i.e. each SWMHA block has it's own FFN, or to use a single
+            shared FFN across the layers in the SWMHA, by default True.
+            See "One Wide Feedforward is All You Need" by Pires et al. 2023.
         reverse_path : bool, optional
             Whether or not to reverse the path before passing it through the
             signature layers, by default False.
@@ -100,6 +106,8 @@ class SeqSigNetFullAttention(nn.Module):
             sig_depth=sig_depth,
             num_heads=num_heads,
             num_layers=num_layers,
+            dropout_rate=dropout_rate,
+            multiple_ffn=multiple_ffn,
             reverse_path=reverse_path,
             augmentation_type=augmentation_type,
             hidden_dim_aug=hidden_dim_aug,
