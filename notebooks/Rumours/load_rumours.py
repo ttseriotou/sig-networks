@@ -170,3 +170,6 @@ df_rumours = df_rumours.reset_index(drop=True)
 ##################################################
 output_dim = len(df_rumours["label"].unique())
 y_data = torch.tensor(df_rumours["label"].astype(float).values, dtype=torch.int64)
+
+# Obtain the timeline ids
+split_ids = torch.tensor(df_rumours["timeline_id"].astype(int))
