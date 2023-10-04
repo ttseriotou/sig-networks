@@ -26,7 +26,7 @@ class SWMHAUNetwork(nn.Module):
         hidden_dim_ffn: list[int] | int,
         output_dim: int,
         dropout_rate: float,
-        multiple_ffn: bool = True,
+        pooling: str,
         reverse_path: bool = False,
         augmentation_type: str = "Conv1d",
         hidden_dim_aug: list[int] | int | None = None,
@@ -60,11 +60,12 @@ class SWMHAUNetwork(nn.Module):
             Dimension of the output layer in the FFN.
         dropout_rate : float
             Dropout rate in the FFN and SWMHAU.
-        multiple_ffn : bool, optional
-            Whether or not to use different FFN components at each layer of the SWMHAU,
-            i.e. each SWMHA block has it's own FFN, or to use a single
-            shared FFN across the layers in the SWMHA, by default True.
-            See "One Wide Feedforward is All You Need" by Pires et al. 2023.
+        pooling: str | None
+            Pooling operation to apply in SWMHAU to obtain history representation.
+            Options are:
+                - "signature": apply signature on a FFN of the MHA units at the end
+                  to obtain the final history representation
+                - "cls": introduce a CLS token and return the MHA output for this token
         reverse_path : bool, optional
             Whether or not to reverse the path before passing it through the
             signature layers, by default False.
@@ -99,7 +100,7 @@ class SWMHAUNetwork(nn.Module):
             num_heads=num_heads,
             num_layers=num_layers,
             dropout_rate=dropout_rate,
-            multiple_ffn=multiple_ffn,
+            pooling=pooling,
             reverse_path=reverse_path,
             augmentation_type=augmentation_type,
             hidden_dim_aug=hidden_dim_aug,

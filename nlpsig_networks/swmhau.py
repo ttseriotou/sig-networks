@@ -27,7 +27,7 @@ class SWMHA(nn.Module):
         num_heads: int,
         num_layers: int,
         dropout_rate: float,
-        multiple_ffn: bool = True,
+        pooling: str | None,
         reverse_path: bool = False,
     ):
         """
@@ -47,12 +47,14 @@ class SWMHA(nn.Module):
         num_layers : int
             The number of layers in the SWMHAU.
         dropout_rate : float
-            Probability of dropout in linear layer.
-        multiple_ffn : bool, optional
-            Whether or not to use different FFN components at each layer,
-            i.e. each SWMHA block has it's own FFN, or to use a single
-            shared FFN across the layers in the SWMHA, by default True.
-            See "One Wide Feedforward is All You Need" by Pires et al. 2023.
+            Probability of dropout in FFN.
+        pooling: str | None
+            Pooling operation to apply. If None, no pooling is applied.
+            Options are:
+                - "signature": apply signature on a FFN of the MHA units at the end
+                  to obtain the final history representation
+                - "cls": introduce a CLS token and return the MHA output for this token
+                - None: no pooling is applied (return the FFN of the MHA units)
         reverse_path : bool, optional
             Whether or not to reverse the path before passing it through the
             signature layers, by default False.
@@ -75,6 +77,7 @@ class SWMHA(nn.Module):
         self.sig_depth = sig_depth
         self.num_heads = num_heads
         self.num_layers = num_layers
+        self.pooling = pooling
         self.reverse_path = reverse_path
 
         # create signature layers
@@ -105,36 +108,80 @@ class SWMHA(nn.Module):
             ]
         )
 
-        # create FFN layer(s) to project the output of
-        # the MHA layers down to original input size
-        self.multiple_ffn = multiple_ffn
-        if self.multiple_ffn:
-            self.ffn_layers = nn.ModuleList(
-                [
-                    FeedforwardNeuralNetModel(
-                        input_dim=self.signature_terms,
-                        hidden_dim=2 * self.signature_terms,
-                        output_dim=self.input_size,
-                        dropout_rate=dropout_rate,
-                    )
-                ]
-            )
-        else:
-            self.ffn_layers = FeedforwardNeuralNetModel(
-                input_dim=self.signature_terms,
-                hidden_dim=4 * self.signature_terms,
-                output_dim=self.input_size,
-                dropout_rate=dropout_rate,
+        # create dropout layers for MHA
+        self.dropout_mha = nn.ModuleList(
+            [nn.Dropout(dropout_rate) for _ in range(self.num_layers)]
+        )
+
+        # create layer norm layers for MHA
+        self.layer_norm_mha = nn.ModuleList(
+            [nn.LayerNorm(self.signature_terms) for _ in range(self.num_layers)]
+        )
+
+        # if num_layers > 1, create FFN layer(s) to project the output of
+        # the MHA layers down to original input size so that we can continually
+        # compute streams of signatures
+        self.ffn_layers = nn.ModuleList(
+            [
+                FeedforwardNeuralNetModel(
+                    input_dim=self.signature_terms,
+                    hidden_dim=2 * self.signature_terms,
+                    output_dim=self.input_size,
+                    dropout_rate=dropout_rate,
+                )
+                for _ in range(self.num_layers - 1)
+            ]
+        )
+
+        # create dropout layers for FFN
+        self.dropout_ffn = nn.ModuleList(
+            [nn.Dropout(dropout_rate) for _ in range(self.num_layers)]
+        )
+
+        # determine final FFN layer
+        if self.pooling == "signature":
+            # final FFN layer to project the output of the MHA layers down to
+            # original input size to compute final signature
+            self.ffn_layers.append(
+                FeedforwardNeuralNetModel(
+                    input_dim=self.signature_terms,
+                    hidden_dim=2 * self.signature_terms,
+                    output_dim=self.input_size,
+                    dropout_rate=dropout_rate,
+                )
             )
 
-        # layer norm
-        self.norm = nn.LayerNorm(self.signature_terms)
+            # final signature without lift (i.e. no expanding windows)
+            if self.log_signature:
+                self.final_signature = LogSignature(depth=self.sig_depth, stream=False)
+            else:
+                self.final_signature = Signature(depth=self.sig_depth, stream=False)
 
-        # final signature without lift (i.e. no expanding windows)
-        if self.log_signature:
-            self.signature2 = LogSignature(depth=sig_depth, stream=False)
+            # no layer norm for final FFN
+            self.final_layer_norm = None
         else:
-            self.signature2 = Signature(depth=sig_depth, stream=False)
+            # final FFN layer to project the output of the MHA layers without any
+            # dimension reduction
+            self.ffn_layers.append(
+                FeedforwardNeuralNetModel(
+                    input_dim=self.signature_terms,
+                    hidden_dim=2 * self.signature_terms,
+                    output_dim=self.signature_terms,
+                    dropout_rate=dropout_rate,
+                )
+            )
+
+            # no final signature
+            self.final_signature = None
+
+            # layer norm for final FFN
+            self.final_layer_norm = nn.LayerNorm(self.signature_terms)
+
+        if self.pooling == "cls":
+            # define the classification token
+            self.cls_token = nn.Parameter(torch.randn(1, 1, self.signature_terms))
+        else:
+            self.cls_token = None
 
     def _check_signature_terms_divisible_num_heads(
         self, input_size: int, log_signature: bool, sig_depth: int, num_heads: int
@@ -175,23 +222,36 @@ class SWMHA(nn.Module):
                 # reverse the posts back to the original order
                 x = torch.flip(x, dims=[1])
 
+            if layer == self.num_layers - 1 and self.pooling == "cls":
+                # prepend classification token to the streamed signatures
+                x = torch.cat([self.cls_token.repeat(x.shape[0], 1, 1), x], dim=1)
+
             # obtain padding mask on the streamed signatures
             mask = obtain_signatures_mask(x)
             # apply MHA layer to the signatures
             attention_out = self.mha_layers[layer](x, x, x, key_padding_mask=mask)[0]
 
-            # apply layer norm and residual connection
-            x = self.norm(x + attention_out)
+            # apply layer norm and residual connection (with dropout)
+            x = self.layer_norm_mha[layer](x + self.dropout_mha[layer](attention_out))
 
-            # apply FFN layer to the signatures to decrease
-            # the dimension back to the original
-            if self.multiple_ffn:
-                x = self.ffn_layers[layer](x)
-            else:
-                x = self.ffn_layers(x)
+            # apply FFN
+            ffn_out = self.ffn_layers[layer](x)
+            # apply dropout to FFN output
+            ffn_out = self.dropout_ffn[-1](ffn_out)
 
-        # take final signature
-        out = self.signature2(x)
+            if layer != self.num_layers - 1:
+                x = ffn_out
+
+        if self.pooling == "signature":
+            # take final signature
+            out = self.final_signature(ffn_out)
+        else:
+            # apply layer norm and residual connection to final FFN output
+            out = self.final_layer_norm(x + ffn_out)
+
+            if self.pooling == "cls":
+                # extract the classification token output
+                out = out[:, 0, :]
 
         return out
 
@@ -210,7 +270,7 @@ class SWMHAU(nn.Module):
         num_heads: int,
         num_layers: int,
         dropout_rate: float,
-        multiple_ffn: bool = True,
+        pooling: str | None,
         reverse_path: bool = False,
         augmentation_type: str = "Conv1d",
         hidden_dim_aug: list[int] | int | None = None,
@@ -234,11 +294,13 @@ class SWMHAU(nn.Module):
             The number of layers in the SWMHAU.
         dropout_rate : float
             Probability of dropout in linear layer.
-        multiple_ffn : bool, optional
-            Whether or not to use different FFN components at each layer,
-            i.e. each SWMHA block has it's own FFN, or to use a single
-            shared FFN across the layers in the SWMHA, by default True.
-            See "One Wide Feedforward is All You Need" by Pires et al. 2023.
+        pooling: str | None
+            Pooling operation to apply. If None, no pooling is applied.
+            Options are:
+                - "signature": apply signature on a FFN of the MHA units at the end
+                  to obtain the final history representation
+                - "cls": introduce a CLS token and return the MHA output for this token
+                - None: no pooling is applied (return the FFN of the MHA units)
         reverse_path : bool, optional
             Whether or not to reverse the path before passing it through the
             signature layers, by default False.
@@ -260,8 +322,8 @@ class SWMHAU(nn.Module):
         self.sig_depth = sig_depth
         self.num_heads = num_heads
         self.num_layers = num_layers
+        self.pooling = pooling
         self.dropout_rate = dropout_rate
-        self.multiple_ffn = multiple_ffn
         self.reverse_path = reverse_path
 
         if augmentation_type not in ["Conv1d", "signatory"]:
@@ -305,7 +367,7 @@ class SWMHAU(nn.Module):
             num_heads=self.num_heads,
             num_layers=self.num_layers,
             dropout_rate=self.dropout_rate,
-            multiple_ffn=self.multiple_ffn,
+            pooling=self.pooling,
             reverse_path=self.reverse_path,
         )
 

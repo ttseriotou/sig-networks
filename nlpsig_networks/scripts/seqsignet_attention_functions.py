@@ -24,6 +24,7 @@ def implement_seqsignet_attention(
     embedding_dim: int,
     log_signature: bool,
     sig_depth: int,
+    pooling: str,
     num_heads: int,
     num_layers: int,
     lstm_hidden_dim: int,
@@ -66,6 +67,7 @@ def implement_seqsignet_attention(
         "hidden_dim_ffn": ffn_hidden_dim,
         "output_dim": output_dim,
         "dropout_rate": dropout_rate,
+        "pooling": pooling,
         "augmentation_type": augmentation_type,
         "hidden_dim_aug": hidden_dim_aug,
         "comb_method": comb_method,
@@ -127,6 +129,7 @@ def seqsignet_attention_hyperparameter_search(
     dim_reduce_methods: list[str],
     dimensions: list[int],
     log_signature: bool,
+    pooling: str,
     swmhau_parameters: list[tuple[int, int, int]],
     num_layers: list[int],
     lstm_hidden_dim_sizes: list[int],
@@ -231,6 +234,7 @@ def seqsignet_attention_hyperparameter_search(
                                             num_features=input["num_features"],
                                             log_signature=log_signature,
                                             sig_depth=sig_depth,
+                                            pooling=pooling,
                                             num_heads=num_heads,
                                             num_layers=n_layers,
                                             lstm_hidden_dim=lstm_hidden_dim,
@@ -290,6 +294,7 @@ def seqsignet_attention_hyperparameter_search(
                                         ]
                                         results["num_features"] = input["num_features"]
                                         results["log_signature"] = log_signature
+                                        results["pooling"] = pooling
                                         results["num_heads"] = num_heads
                                         results["num_layers"] = n_layers
                                         results["lstm_hidden_dim"] = lstm_hidden_dim
@@ -359,6 +364,7 @@ def seqsignet_attention_hyperparameter_search(
                                             "embedding_dim": input["embedding_dim"],
                                             "num_features": input["num_features"],
                                             "log_signature": log_signature,
+                                            "pooling": pooling,
                                             "num_heads": num_heads,
                                             "num_layers": n_layers,
                                             "lstm_hidden_dim": lstm_hidden_dim,
@@ -401,17 +407,18 @@ def seqsignet_attention_hyperparameter_search(
             num_epochs=num_epochs,
             x_data=input["x_data"],
             y_data=y_data,
-            sig_depth=checkpoint["extra_info"]["sig_depth"],
             input_channels=checkpoint["extra_info"]["input_channels"],
             output_channels=checkpoint["extra_info"]["output_channels"],
             embedding_dim=input["embedding_dim"],
             num_features=input["num_features"],
-            log_signature=log_signature,
-            output_dim=output_dim,
+            log_signature=checkpoint["extra_info"]["log_signature"],
+            sig_depth=checkpoint["extra_info"]["sig_depth"],
+            pooling=checkpoint["extra_info"]["pooling"],
             num_heads=checkpoint["extra_info"]["num_heads"],
             num_layers=checkpoint["extra_info"]["num_layers"],
             lstm_hidden_dim=checkpoint["extra_info"]["lstm_hidden_dim"],
             ffn_hidden_dim=checkpoint["extra_info"]["ffn_hidden_dim"],
+            output_dim=output_dim,
             dropout_rate=checkpoint["extra_info"]["dropout_rate"],
             learning_rate=checkpoint["extra_info"]["learning_rate"],
             seed=seed,
@@ -454,6 +461,7 @@ def seqsignet_attention_hyperparameter_search(
         test_results["embedding_dim"] = input["embedding_dim"]
         test_results["num_features"] = input["num_features"]
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
+        test_results["pooling"] = checkpoint["extra_info"]["pooling"]
         test_results["num_heads"] = checkpoint["extra_info"]["num_heads"]
         test_results["num_layers"] = checkpoint["extra_info"]["num_layers"]
         test_results["lstm_hidden_dim"] = checkpoint["extra_info"]["lstm_hidden_dim"]

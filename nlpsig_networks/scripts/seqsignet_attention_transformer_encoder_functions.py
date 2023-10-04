@@ -11,10 +11,12 @@ from tqdm.auto import tqdm
 from nlpsig_networks.pytorch_utils import SaveBestModel, _get_timestamp, set_seed
 from nlpsig_networks.scripts.implement_model import implement_model
 from nlpsig_networks.scripts.seqsignet_functions import obtain_SeqSigNet_input
-from nlpsig_networks.seqsignet_full_attention import SeqSigNetFullAttention
+from nlpsig_networks.seqsignet_seqsignet_attention_encoder import (
+    SeqSigNetTransformerEncoder,
+)
 
 
-def implement_seqsignet_full_attention(
+def implement_seqsignet_seqsignet_attention_encoder(
     num_epochs: int,
     x_data: np.array | torch.Tensor | dict[str, np.array | torch.Tensor],
     y_data: torch.tensor | np.array,
@@ -24,6 +26,7 @@ def implement_seqsignet_full_attention(
     embedding_dim: int,
     log_signature: bool,
     sig_depth: int,
+    pooling: str,
     num_heads: int,
     num_layers: int,
     ffn_hidden_dim: list[int] | int,
@@ -47,12 +50,12 @@ def implement_seqsignet_full_attention(
     verbose_training: bool = False,
     verbose_results: bool = False,
     verbose_model: bool = False,
-) -> tuple[SeqSigNetFullAttention, pd.DataFrame]:
+) -> tuple[SeqSigNetTransformerEncoder, pd.DataFrame]:
     # set seed
     set_seed(seed)
 
-    # initialise SeqSigNetFullAttention
-    SeqSigNetFullAttention_args = {
+    # initialise SeqSigNetTransformerEncoder
+    SeqSigNetTransformerEncoder_args = {
         "input_channels": input_channels,
         "output_channels": output_channels,
         "num_features": num_features,
@@ -64,16 +67,17 @@ def implement_seqsignet_full_attention(
         "hidden_dim_ffn": ffn_hidden_dim,
         "output_dim": output_dim,
         "dropout_rate": dropout_rate,
+        "pooling": pooling,
         "augmentation_type": augmentation_type,
         "hidden_dim_aug": hidden_dim_aug,
         "comb_method": comb_method,
     }
-    seqsignet_full_attention_model = SeqSigNetFullAttention(
-        **SeqSigNetFullAttention_args
+    seqsignet_seqsignet_attention_encoder_model = SeqSigNetTransformerEncoder(
+        **SeqSigNetTransformerEncoder_args
     )
 
     if verbose_model:
-        print(seqsignet_full_attention_model)
+        print(seqsignet_seqsignet_attention_encoder_model)
 
     # convert data to torch tensors
     # deal with case if x_data is a dictionary
@@ -92,7 +96,7 @@ def implement_seqsignet_full_attention(
         y_data = torch.tensor(y_data)
 
     return implement_model(
-        model=seqsignet_full_attention_model,
+        model=seqsignet_seqsignet_attention_encoder_model,
         num_epochs=num_epochs,
         x_data=x_data,
         y_data=y_data,
@@ -113,7 +117,7 @@ def implement_seqsignet_full_attention(
     )
 
 
-def seqsignet_full_attention_hyperparameter_search(
+def seqsignet_seqsignet_attention_encoder_hyperparameter_search(
     num_epochs: int,
     df: pd.DataFrame,
     id_column: str,
@@ -127,6 +131,7 @@ def seqsignet_full_attention_hyperparameter_search(
     dim_reduce_methods: list[str],
     dimensions: list[int],
     log_signature: bool,
+    pooling: str,
     swmhau_parameters: list[tuple[int, int, int]],
     num_layers: list[int],
     ffn_hidden_dim_sizes: list[int] | list[list[int]],
@@ -159,7 +164,9 @@ def seqsignet_full_attention_hyperparameter_search(
         raise ValueError("validation_metric must be either 'loss', 'accuracy' or 'f1'")
 
     # initialise SaveBestModel class
-    model_output = f"best_seqsignet_full_attention_model_{_get_timestamp()}.pkl"
+    model_output = (
+        f"best_seqsignet_seqsignet_attention_encoder_model_{_get_timestamp()}.pkl"
+    )
     save_best_model = SaveBestModel(
         metric=validation_metric, output=model_output, verbose=verbose
     )
@@ -218,7 +225,10 @@ def seqsignet_full_attention_hyperparameter_search(
                                 scores = []
                                 verbose_model = verbose
                                 for seed in seeds:
-                                    _, results = implement_seqsignet_full_attention(
+                                    (
+                                        _,
+                                        results,
+                                    ) = implement_seqsignet_seqsignet_attention_encoder(
                                         num_epochs=num_epochs,
                                         x_data=input["x_data"],
                                         y_data=y_data,
@@ -228,6 +238,7 @@ def seqsignet_full_attention_hyperparameter_search(
                                         num_features=input["num_features"],
                                         log_signature=log_signature,
                                         sig_depth=sig_depth,
+                                        pooling=pooling,
                                         num_heads=num_heads,
                                         num_layers=n_layers,
                                         ffn_hidden_dim=ffn_hidden_dim,
@@ -280,6 +291,7 @@ def seqsignet_full_attention_hyperparameter_search(
                                     results["embedding_dim"] = input["embedding_dim"]
                                     results["num_features"] = input["num_features"]
                                     results["log_signature"] = log_signature
+                                    results["pooling"] = pooling
                                     results["num_heads"] = num_heads
                                     results["num_layers"] = n_layers
                                     results["ffn_hidden_dim"] = [
@@ -344,6 +356,7 @@ def seqsignet_full_attention_hyperparameter_search(
                                         "embedding_dim": input["embedding_dim"],
                                         "num_features": input["num_features"],
                                         "log_signature": log_signature,
+                                        "pooling": pooling,
                                         "num_heads": num_heads,
                                         "num_layers": n_layers,
                                         "ffn_hidden_dim": ffn_hidden_dim,
@@ -381,20 +394,21 @@ def seqsignet_full_attention_hyperparameter_search(
     test_scores = []
     test_results_df = pd.DataFrame()
     for seed in seeds:
-        _, test_results = implement_seqsignet_full_attention(
+        _, test_results = implement_seqsignet_seqsignet_attention_encoder(
             num_epochs=num_epochs,
             x_data=input["x_data"],
             y_data=y_data,
-            sig_depth=checkpoint["extra_info"]["sig_depth"],
             input_channels=checkpoint["extra_info"]["input_channels"],
             output_channels=checkpoint["extra_info"]["output_channels"],
             embedding_dim=input["embedding_dim"],
             num_features=input["num_features"],
-            log_signature=log_signature,
-            output_dim=output_dim,
+            log_signature=checkpoint["extra_info"]["log_signature"],
+            sig_depth=checkpoint["extra_info"]["sig_depth"],
+            pooling=checkpoint["extra_info"]["pooling"],
             num_heads=checkpoint["extra_info"]["num_heads"],
             num_layers=checkpoint["extra_info"]["num_layers"],
             ffn_hidden_dim=checkpoint["extra_info"]["ffn_hidden_dim"],
+            output_dim=output_dim,
             dropout_rate=checkpoint["extra_info"]["dropout_rate"],
             learning_rate=checkpoint["extra_info"]["learning_rate"],
             seed=seed,
@@ -437,6 +451,7 @@ def seqsignet_full_attention_hyperparameter_search(
         test_results["embedding_dim"] = input["embedding_dim"]
         test_results["num_features"] = input["num_features"]
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
+        test_results["pooling"] = checkpoint["extra_info"]["pooling"]
         test_results["num_heads"] = checkpoint["extra_info"]["num_heads"]
         test_results["num_layers"] = checkpoint["extra_info"]["num_layers"]
         test_results["ffn_hidden_dim"] = [

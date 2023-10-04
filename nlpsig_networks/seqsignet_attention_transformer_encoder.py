@@ -9,7 +9,7 @@ from nlpsig_networks.swmhau import SWMHAU
 from nlpsig_networks.utils import obtain_signatures_mask
 
 
-class SeqSigNetFullAttention(nn.Module):
+class SeqSigNetTransformerEncoder(nn.Module):
     """
     MHA applied to Deep Signature Neural Network Units for classification.
     """
@@ -27,14 +27,15 @@ class SeqSigNetFullAttention(nn.Module):
         hidden_dim_ffn: list[int] | int,
         output_dim: int,
         dropout_rate: float,
-        multiple_ffn: bool = True,
+        pooling: str,
+        transformer_encoder_layers: int,
         reverse_path: bool = False,
         augmentation_type: str = "Conv1d",
         hidden_dim_aug: list[int] | int | None = None,
         comb_method: str = "concatenation",
     ):
         """
-        SeqSigNetAttention network for classification.
+        SeqSigNetTransformerEncoder network for classification.
 
         Input data will have the size: [batch size, window size (w),
         all embedding dimensions (history + time + post), unit size (n)]
@@ -66,11 +67,14 @@ class SeqSigNetFullAttention(nn.Module):
             Dimension of the output layer in the FFN.
         dropout_rate : float
             Dropout rate in the FFN and SWMHAU.
-        multiple_ffn : bool, optional
-            Whether or not to use different FFN components at each layer of the SWMHAU,
-            i.e. each SWMHA block has it's own FFN, or to use a single
-            shared FFN across the layers in the SWMHA, by default True.
-            See "One Wide Feedforward is All You Need" by Pires et al. 2023.
+        pooling: str | None
+            Pooling operation to apply in SWMHAU to obtain history representation.
+            Options are:
+                - "signature": apply signature on a FFN of the MHA units at the end
+                  to obtain the final history representation
+                - "cls": introduce a CLS token and return the MHA output for this token
+        transformer_encoder_layers: int
+            The number of transformer encoder layers to process the units.
         reverse_path : bool, optional
             Whether or not to reverse the path before passing it through the
             signature layers, by default False.
@@ -95,8 +99,13 @@ class SeqSigNetFullAttention(nn.Module):
             - scaled_concatenation: concatenation of single value scaled path
               signature and embedding vector
         """
+        super(SeqSigNetTransformerEncoder, self).__init__()
 
-        super(SeqSigNetFullAttention, self).__init__()
+        if self.transformer_encoder_layers < 1:
+            raise ValueError(
+                "`transformer_encoder_layers` must be at least 1. "
+                f"Got {transformer_encoder_layers} instead."
+            )
 
         # SWMHAU applied to the input (the unit includes the convolution layer)
         self.swmhau = SWMHAU(
@@ -107,21 +116,29 @@ class SeqSigNetFullAttention(nn.Module):
             num_heads=num_heads,
             num_layers=num_layers,
             dropout_rate=dropout_rate,
-            multiple_ffn=multiple_ffn,
+            pooling=pooling,
             reverse_path=reverse_path,
             augmentation_type=augmentation_type,
             hidden_dim_aug=hidden_dim_aug,
         )
 
-        # multi-head attention layer to process output of the units
-        # create Multihead Attention layers
-        self.mha = nn.MultiheadAttention(
-            embed_dim=self.swmhau.swmha.signature_terms,
-            num_heads=self.swmhau.num_heads,
+        # transformer encoder layer to process output of the units
+        self.transformer_encoder = nn.TransformerEncoderLayer(
+            d_model=self.swmhau.swmha.signature_terms,
+            nhead=self.swmhau.num_heads,
+            dim_feedforward=2 * self.swmhau.swmha.signature_terms,
+            dropout=dropout_rate,
             batch_first=True,
         )
 
-        # Define the classification token
+        self.transformer_encoder_layers = transformer_encoder_layers
+        if self.transformer_encoder_layers > 1:
+            self.transformer_encoder = nn.TransformerEncoder(
+                encoder_layer=self.transformer_encoder,
+                num_layers=self.transformer_encoder_layers,
+            )
+
+        # define the classification token
         self.cls_token = nn.Parameter(
             torch.randn(1, 1, self.swmhau.swmha.signature_terms)
         )
@@ -162,16 +179,16 @@ class SeqSigNetFullAttention(nn.Module):
         # unflatten out to have dimensions [batch, units, hidden_dim]
         out = out.unflatten(0, (path.shape[0], path.shape[1]))
 
-        # pre-pend a classification token to the outputs of the SWMHAU
+        # prepend a classification token to the outputs of the SWMHAU
         # so out has dimensions [batch, units+1, hidden_dim]
         out = torch.cat([self.cls_token.repeat(out.shape[0], 1, 1), out], dim=1)
 
         # apply MHA to the output of the SWMHAUs
         # obtain padding mask on the outputs of SWMHAU
         mask = obtain_signatures_mask(out)
-        out = self.mha(out, out, out, key_padding_mask=mask)[0]
+        out = self.transformer_encoder(out, key_padding_mask=mask)[0]
 
-        # extract the classification token
+        # extract the classification token output
         out = out[:, 0, :]
 
         # combine with features provided
