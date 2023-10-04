@@ -9,7 +9,7 @@ from nlpsig_networks.swmhau import SWMHAU
 from nlpsig_networks.utils import obtain_signatures_mask
 
 
-class SeqSigNetTransformerEncoder(nn.Module):
+class SeqSigNetAttentionEncoder(nn.Module):
     """
     MHA applied to Deep Signature Neural Network Units for classification.
     """
@@ -35,7 +35,7 @@ class SeqSigNetTransformerEncoder(nn.Module):
         comb_method: str = "concatenation",
     ):
         """
-        SeqSigNetTransformerEncoder network for classification.
+        SeqSigNetAttentionEncoder network for classification.
 
         Input data will have the size: [batch size, window size (w),
         all embedding dimensions (history + time + post), unit size (n)]
@@ -99,7 +99,7 @@ class SeqSigNetTransformerEncoder(nn.Module):
             - scaled_concatenation: concatenation of single value scaled path
               signature and embedding vector
         """
-        super(SeqSigNetTransformerEncoder, self).__init__()
+        super(SeqSigNetAttentionEncoder, self).__init__()
 
         if self.transformer_encoder_layers < 1:
             raise ValueError(

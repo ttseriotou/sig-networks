@@ -8,7 +8,7 @@ from nlpsig_networks.ffn_baseline import FeedforwardNeuralNetModel
 from nlpsig_networks.swmhau import SWMHAU
 
 
-class SeqSigNetAttention(nn.Module):
+class SeqSigNetAttentionBiLSTM(nn.Module):
     """
     MHA applied to Deep Signature Neural Network Units for classification.
     """
@@ -34,7 +34,7 @@ class SeqSigNetAttention(nn.Module):
         comb_method: str = "concatenation",
     ):
         """
-        SeqSigNetAttention network for classification.
+        SeqSigNetAttentionBiLSTM network for classification.
 
         Input data will have the size: [batch size, window size (w),
         all embedding dimensions (history + time + post), unit size (n)]
@@ -100,7 +100,7 @@ class SeqSigNetAttention(nn.Module):
               signature and embedding vector
         """
 
-        super(SeqSigNetAttention, self).__init__()
+        super(SeqSigNetAttentionBiLSTM, self).__init__()
 
         # SWMHAU applied to the input (the unit includes the convolution layer)
         self.swmhau = SWMHAU(
