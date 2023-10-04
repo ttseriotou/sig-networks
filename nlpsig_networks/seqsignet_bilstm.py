@@ -71,7 +71,7 @@ class SeqSigNet(nn.Module):
         output_dim : int
             Dimension of the output layer in the FFN.
         dropout_rate : float
-            Dropout rate in the FFN, BiLSTM and SWNU.
+            Dropout rate in the FFN.
         reverse_path : bool, optional
             Whether or not to reverse the path before passing it through the
             signature layers, by default False.
@@ -115,7 +115,6 @@ class SeqSigNet(nn.Module):
             log_signature=log_signature,
             sig_depth=sig_depth,
             hidden_dim=hidden_dim_swnu,
-            dropout_rate=dropout_rate,
             pooling=pooling,
             reverse_path=reverse_path,
             BiLSTM=BiLSTM,
@@ -130,7 +129,6 @@ class SeqSigNet(nn.Module):
             hidden_size=self.hidden_dim_lstm,
             num_layers=1,
             batch_first=True,
-            dropout=dropout_rate,
             bidirectional=True,
         )
 
