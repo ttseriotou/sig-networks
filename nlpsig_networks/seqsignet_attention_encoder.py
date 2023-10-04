@@ -66,7 +66,7 @@ class SeqSigNetAttentionEncoder(nn.Module):
         output_dim : int
             Dimension of the output layer in the FFN.
         dropout_rate : float
-            Dropout rate in the FFN and SWMHAU.
+            Dropout rate in the FFN, Transformer encoder layer(s) and SWMHAU.
         pooling: str | None
             Pooling operation to apply in SWMHAU to obtain history representation.
             Options are:

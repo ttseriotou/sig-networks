@@ -24,6 +24,7 @@ class SWLSTM(nn.Module):
         log_signature: bool,
         sig_depth: int,
         hidden_dim: list[int] | int,
+        dropout_rate: float,
         pooling: str | None,
         reverse_path: bool = False,
         BiLSTM: bool = False,
@@ -42,6 +43,8 @@ class SWLSTM(nn.Module):
             The depth to truncate the path signature at.
         hidden_dim : list[int] | int
             Dimensions of the hidden layers in the LSTM blocks in the SWLSTM.
+        dropout_rate : float
+            Probability of dropout. Applied to LSTM layers.
         pooling: str | None
             Pooling operation to apply. If None, no pooling is applied.
             Options are:
@@ -66,6 +69,7 @@ class SWLSTM(nn.Module):
             hidden_dim = [hidden_dim]
         self.sig_depth = sig_depth
         self.hidden_dim = hidden_dim
+        self.dropout_rate = dropout_rate
         self.pooling = pooling
         if self.pooling not in ["signature", "lstm", None]:
             raise ValueError(
@@ -113,6 +117,7 @@ class SWLSTM(nn.Module):
                     hidden_size=self.hidden_dim[layer],
                     num_layers=1,
                     batch_first=True,
+                    dropout=self.dropout_rate,
                     bidirectional=False
                     if layer != (len(self.hidden_dim) - 1)
                     else self.BiLSTM,
@@ -227,6 +232,7 @@ class SWNU(nn.Module):
         log_signature: bool,
         sig_depth: int,
         hidden_dim: list[int] | int,
+        dropout_rate: float,
         pooling: str | None,
         output_channels: int | None = None,
         reverse_path: bool = False,
@@ -247,6 +253,8 @@ class SWNU(nn.Module):
             The depth to truncate the path signature at.
         hidden_dim : list[int] | int
             Dimensions of the hidden layers in the SNWU blocks.
+        dropout_rate : float
+            Probability of dropout. Applied to LSTM layers.
         pooling: str | None
             Pooling operation to apply. If None, no pooling is applied.
             Options are:
@@ -284,6 +292,7 @@ class SWNU(nn.Module):
             hidden_dim = [hidden_dim]
         self.hidden_dim = hidden_dim
 
+        self.dropout_rate = dropout_rate
         self.pooling = pooling
 
         self.output_channels = (
@@ -331,6 +340,7 @@ class SWNU(nn.Module):
             log_signature=self.log_signature,
             sig_depth=self.sig_depth,
             hidden_dim=self.hidden_dim,
+            dropout_rate=self.dropout_rate,
             pooling=self.pooling,
             reverse_path=self.reverse_path,
             BiLSTM=self.BiLSTM,

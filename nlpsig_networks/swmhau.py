@@ -47,7 +47,8 @@ class SWMHA(nn.Module):
         num_layers : int
             The number of layers in the SWMHAU.
         dropout_rate : float
-            Probability of dropout in FFN.
+            Probability of dropout. Applied to Multihead Attention,
+            and to the FFN layers (before layer norm and residual connection).
         pooling: str | None
             Pooling operation to apply. If None, no pooling is applied.
             Options are:
@@ -77,6 +78,7 @@ class SWMHA(nn.Module):
         self.sig_depth = sig_depth
         self.num_heads = num_heads
         self.num_layers = num_layers
+        self.dropout_rate = dropout_rate
         self.pooling = pooling
         self.reverse_path = reverse_path
 
@@ -110,7 +112,7 @@ class SWMHA(nn.Module):
 
         # create dropout layers for MHA
         self.dropout_mha = nn.ModuleList(
-            [nn.Dropout(dropout_rate) for _ in range(self.num_layers)]
+            [nn.Dropout(self.dropout_rate) for _ in range(self.num_layers)]
         )
 
         # create layer norm layers for MHA
@@ -135,7 +137,7 @@ class SWMHA(nn.Module):
 
         # create dropout layers for FFN
         self.dropout_ffn = nn.ModuleList(
-            [nn.Dropout(dropout_rate) for _ in range(self.num_layers)]
+            [nn.Dropout(self.dropout_rate) for _ in range(self.num_layers)]
         )
 
         # determine final FFN layer
@@ -293,7 +295,8 @@ class SWMHAU(nn.Module):
         num_layers : int
             The number of layers in the SWMHAU.
         dropout_rate : float
-            Probability of dropout in linear layer.
+            Probability of dropout. Applied to Multihead Attention,
+            and to the FFN layers (before layer norm and residual connection).
         pooling: str | None
             Pooling operation to apply. If None, no pooling is applied.
             Options are:

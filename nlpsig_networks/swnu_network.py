@@ -61,7 +61,7 @@ class SWNUNetwork(nn.Module):
         output_dim : int
             Dimension of the output layer in the FFN.
         dropout_rate : float
-            Dropout rate in the FFN.
+            Dropout rate in the FFN and SWNU.
         reverse_path : bool, optional
             Whether or not to reverse the path before passing it through the
             signature layers, by default False.
@@ -105,6 +105,7 @@ class SWNUNetwork(nn.Module):
             log_signature=log_signature,
             sig_depth=sig_depth,
             hidden_dim=hidden_dim_swnu,
+            dropout_rate=dropout_rate,
             pooling=pooling,
             reverse_path=reverse_path,
             BiLSTM=BiLSTM,
