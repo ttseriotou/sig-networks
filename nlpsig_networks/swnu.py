@@ -206,7 +206,7 @@ class SWLSTM(nn.Module):
         elif self.pooling == "lstm":
             # add element-wise the forward and backward LSTM states
             if self.BiLSTM:
-                out = out[-1, :, :] + out[-2, :, :]
+                out = h_n[-1, :, :] + h_n[-2, :, :]
             # reverse sequence padding
             out = out[inverse_perm]
         else:
