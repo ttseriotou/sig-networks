@@ -49,7 +49,7 @@ class SWLSTM(nn.Module):
                   to obtain the final history representation
                 - "lstm": take the final (non-padded) LSTM unit as the final
                   history representation
-                - None: no pooling is applied
+                - None: no pooling is applied (return the final LSTM units)
         reverse_path : bool, optional
             Whether or not to reverse the path before passing it through the
             signature layers, by default False.
