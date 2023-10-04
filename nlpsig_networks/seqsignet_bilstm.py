@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import signatory
 import torch
 import torch.nn as nn
 
@@ -21,6 +20,7 @@ class SeqSigNet(nn.Module):
         embedding_dim: int,
         log_signature: bool,
         sig_depth: int,
+        pooling: str,
         hidden_dim_swnu: list[int] | int,
         hidden_dim_lstm: int,
         hidden_dim_ffn: list[int] | int,
@@ -54,6 +54,13 @@ class SeqSigNet(nn.Module):
             Whether or not to use the log signature or standard signature.
         sig_depth : int
             The depth to truncate the path signature at.
+        pooling: str
+            Pooling operation to apply in SWNU to obtain history representation.
+            Options are:
+                - "signature": apply signature on the LSTM units at the end
+                  to obtain the final history representation
+                - "lstm": take the final (non-padded) LSTM unit as the final
+                  history representation
         hidden_dim_swnu : list[int] | int
             Dimensions of the hidden layers in the SNWU blocks.
         hidden_dim_lstm : int
@@ -95,8 +102,12 @@ class SeqSigNet(nn.Module):
             - scaled_concatenation: concatenation of single value scaled path
               signature and embedding vector
         """
-
         super(SeqSigNet, self).__init__()
+
+        if pooling not in ["signature", "lstm"]:
+            raise ValueError(
+                "`pooling` must be 'signature' or 'lstm'. " f"Got {pooling} instead."
+            )
 
         self.swnu = SWNU(
             input_channels=input_channels,
@@ -104,27 +115,17 @@ class SeqSigNet(nn.Module):
             log_signature=log_signature,
             sig_depth=sig_depth,
             hidden_dim=hidden_dim_swnu,
+            pooling=pooling,
             reverse_path=reverse_path,
             BiLSTM=BiLSTM,
             augmentation_type=augmentation_type,
             hidden_dim_aug=hidden_dim_aug,
         )
 
-        # BiLSTM
-        # compute the input dimension
-        if log_signature:
-            input_dim_lstmsig = signatory.logsignature_channels(
-                in_channels=self.swnu.hidden_dim[-1], depth=sig_depth
-            )
-        else:
-            input_dim_lstmsig = signatory.signature_channels(
-                in_channels=self.swnu.hidden_dim[-1], depth=sig_depth
-            )
-
         # BiLSTM that processes the outputs from SWNUs for each window
         self.hidden_dim_lstm = hidden_dim_lstm
         self.lstm_sig = nn.LSTM(
-            input_size=input_dim_lstmsig,
+            input_size=self.swnu.output_dim,
             hidden_size=self.hidden_dim_lstm,
             num_layers=1,
             batch_first=True,

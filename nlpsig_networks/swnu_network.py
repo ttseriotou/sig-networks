@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import signatory
 import torch
 import torch.nn as nn
 
@@ -21,6 +20,7 @@ class SWNUNetwork(nn.Module):
         embedding_dim: int,
         log_signature: bool,
         sig_depth: int,
+        pooling: str,
         hidden_dim_swnu: list[int] | int,
         hidden_dim_ffn: list[int] | int,
         output_dim: int,
@@ -47,6 +47,13 @@ class SWNUNetwork(nn.Module):
             Whether or not to use the log signature or standard signature.
         sig_depth : int
             The depth to truncate the path signature at.
+        pooling: str
+            Pooling operation to apply in SWNU to obtain history representation.
+            Options are:
+                - "signature": apply signature on the LSTM units at the end
+                  to obtain the final history representation
+                - "lstm": take the final (non-padded) LSTM unit as the final
+                  history representation
         hidden_dim_swnu : list[int] | int
             Dimensions of the hidden layers in the SNWU blocks.
         hidden_dim_ffn : list[int] | int
@@ -87,34 +94,30 @@ class SWNUNetwork(nn.Module):
         """
         super(SWNUNetwork, self).__init__()
 
+        if pooling not in ["signature", "lstm"]:
+            raise ValueError(
+                "`pooling` must be 'signature' or 'lstm'. " f"Got {pooling} instead."
+            )
+
         self.swnu = SWNU(
             input_channels=input_channels,
             output_channels=output_channels,
             log_signature=log_signature,
             sig_depth=sig_depth,
             hidden_dim=hidden_dim_swnu,
+            pooling=pooling,
             reverse_path=reverse_path,
             BiLSTM=BiLSTM,
             augmentation_type=augmentation_type,
             hidden_dim_aug=hidden_dim_aug,
         )
 
-        # signature without lift (for passing into FFN)
-        if log_signature:
-            signature_output_channels = signatory.logsignature_channels(
-                in_channels=self.swnu.hidden_dim[-1], depth=sig_depth
-            )
-        else:
-            signature_output_channels = signatory.signature_channels(
-                channels=self.swnu.hidden_dim[-1], depth=sig_depth
-            )
-
         # determining how to concatenate features to the SWNU features
         self.embedding_dim = embedding_dim
         self.num_features = num_features
         self.comb_method = comb_method
         self.feature_concat = FeatureConcatenation(
-            input_dim=signature_output_channels,
+            input_dim=self.swnu.output_dim,
             num_features=self.num_features,
             embedding_dim=self.embedding_dim,
             comb_method=self.comb_method,
