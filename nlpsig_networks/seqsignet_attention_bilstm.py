@@ -167,25 +167,19 @@ class SeqSigNetAttentionBiLSTM(nn.Module):
         # for each item in the batch dimension, find the number of non-zero windows
         # (i.e. the number of windows that are not fully padded with zeros)
         seq_lengths = torch.sum(torch.sum(path, (2, 3)) != 0, 1)
-        seq_lengths_sorted, perm_idx = seq_lengths.sort(0, descending=True)
+        seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
         out = out[perm_idx]
         out = torch.nn.utils.rnn.pack_padded_sequence(
-            out, seq_lengths_sorted.cpu(), batch_first=True
+            out, seq_lengths.cpu(), batch_first=True
         )
 
         # BiLSTM that combines all deepsignet windows together
-        out, _ = self.lstm_sig(out)
+        _, (out, _) = self.lstm_sig(out)
+        out = out[-1, :, :] + out[-2, :, :]
 
-        # reverse soring of sequences
-        out, _ = torch.nn.utils.rnn.pad_packed_sequence(out, batch_first=True)
+        # reverse sequence padding
         inverse_perm = torch.argsort(perm_idx)
         out = out[inverse_perm]
-
-        # add element-wise the forward and backward LSTM states
-        out = out[:, :, : self.hidden_dim_lstm] + out[:, :, self.hidden_dim_lstm :]
-
-        # take final BiLSTM unit (given by seq_lengths-1 as indexes start at 0)
-        out = out[torch.arange(out.shape[0]), (seq_lengths - 1)]
 
         # combine with features provided
         out = self.feature_concat(out, features)

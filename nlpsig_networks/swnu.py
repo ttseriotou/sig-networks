@@ -173,11 +173,18 @@ class SWLSTM(nn.Module):
             )
 
             # apply LSTM layer
-            x, _ = self.lstm_layers[layer](x)
+            x, (h_n, _) = self.lstm_layers[layer](x)
+
+            # reverse sequence padding
+            inverse_perm = torch.argsort(perm_idx)
+
+            if layer == len(self.hidden_dim) - 1 and self.pooling == "lstm":
+                # don't need to deal with outputs of LSTM if we are
+                # pooling by taking the last hidden state
+                continue
 
             # reverse soring of sequences
             x, _ = torch.nn.utils.rnn.pad_packed_sequence(x, batch_first=True)
-            inverse_perm = torch.argsort(perm_idx)
             x = x[inverse_perm]
 
             # if last layer and using BiLSTM, need to add element-wise
@@ -197,8 +204,14 @@ class SWLSTM(nn.Module):
             # take final signature
             out = self.final_signature(x)
         elif self.pooling == "lstm":
-            # take final LSTM unit (given by seq_lengths-1 as indexes start at 0)
-            out = x[torch.arange(x.shape[0]), (seq_lengths - 1)]
+            # add element-wise the forward and backward LSTM states
+            if self.BiLSTM:
+                out = out[-1, :, :] + out[-2, :, :]
+            # reverse sequence padding
+            out = out[inverse_perm]
+        else:
+            # no pooling, so return the final LSTM units
+            out = x
 
         return out
 
