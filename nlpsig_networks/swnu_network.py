@@ -117,7 +117,7 @@ class SWNUNetwork(nn.Module):
         self.num_features = num_features
         self.comb_method = comb_method
         self.feature_concat = FeatureConcatenation(
-            input_dim=self.swnu.output_dim,
+            input_dim=self.swnu.swlstm.output_dim,
             num_features=self.num_features,
             embedding_dim=self.embedding_dim,
             comb_method=self.comb_method,
