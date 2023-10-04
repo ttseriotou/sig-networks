@@ -237,7 +237,7 @@ class SWMHA(nn.Module):
             # apply FFN
             ffn_out = self.ffn_layers[layer](x)
             # apply dropout to FFN output
-            ffn_out = self.dropout_ffn[-1](ffn_out)
+            ffn_out = self.dropout_ffn[layer](ffn_out)
 
             if layer != self.num_layers - 1:
                 x = ffn_out
