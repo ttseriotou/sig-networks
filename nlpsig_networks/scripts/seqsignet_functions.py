@@ -492,6 +492,7 @@ def seqsignet_hyperparameter_search(
             sig_depth=checkpoint["extra_info"]["sig_depth"],
             pooling=checkpoint["extra_info"]["pooling"],
             swnu_hidden_dim=checkpoint["extra_info"]["swnu_hidden_dim"],
+            lstm_hidden_dim=checkpoint["extra_info"]["lstm_hidden_dim"],
             ffn_hidden_dim=checkpoint["extra_info"]["ffn_hidden_dim"],
             output_dim=output_dim,
             BiLSTM=checkpoint["extra_info"]["BiLSTM"],
