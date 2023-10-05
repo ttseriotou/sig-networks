@@ -202,8 +202,7 @@ class SeqSigNetAttentionEncoder(nn.Module):
         # add the positional embeddings to the output of the SWMHAU
         out = out + position_embeddings
 
-        # prepend a classification token to the outputs of the SWMHAU
-        # so out has dimensions [batch, units+1, signature_terms]
+        # prepend a classification token (shape [batch, units+1, signature_terms])
         out = torch.cat([self.cls_token.repeat(out.shape[0], 1, 1), out], dim=1)
 
         # apply MHA to the output of the SWMHAUs
