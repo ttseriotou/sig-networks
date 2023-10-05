@@ -24,6 +24,7 @@ class SeqSigNetAttentionEncoder(nn.Module):
         sig_depth: int,
         num_heads: int,
         num_layers: int,
+        num_units: int,
         hidden_dim_ffn: list[int] | int,
         output_dim: int,
         dropout_rate: float,
@@ -61,6 +62,8 @@ class SeqSigNetAttentionEncoder(nn.Module):
             The number of heads in the Multihead Attention blocks.
         num_layers : int
             The number of layers in the SWMHAU.
+        num_units : int
+            The number of units/windows in the input to process.
         hidden_dim_ffn : list[int] | int
             Dimension of the hidden layers in the FFN.
         output_dim : int
@@ -122,11 +125,21 @@ class SeqSigNetAttentionEncoder(nn.Module):
             hidden_dim_aug=hidden_dim_aug,
         )
 
+        # initialise absolute position embeddings for the units
+        self.position_embeddings = nn.Embedding(
+            num_units, self.swmhau.swmha.signature_terms
+        )
+        # layer norm and dropout after adding the position embeddings
+        self.position_embedding_layer_norm = nn.LayerNorm(
+            self.swmhau.swmha.signature_terms
+        )
+        self.position_embedding_dropout = nn.Dropout(dropout_rate)
+
         # transformer encoder layer to process output of the units
         self.transformer_encoder = nn.TransformerEncoderLayer(
             d_model=self.swmhau.swmha.signature_terms,
             nhead=self.swmhau.num_heads,
-            dim_feedforward=2 * self.swmhau.swmha.signature_terms,
+            dim_feedforward=4 * self.swmhau.swmha.signature_terms,
             dropout=dropout_rate,
             batch_first=True,
         )
@@ -176,11 +189,21 @@ class SeqSigNetAttentionEncoder(nn.Module):
         out_flat = path.flatten(0, 1)
         # apply SWMHAU to out_flat
         out = self.swmhau(out_flat)
-        # unflatten out to have dimensions [batch, units, hidden_dim]
+        # unflatten out to have dimensions [batch, units, signature_terms]
         out = out.unflatten(0, (path.shape[0], path.shape[1]))
 
+        # add positional embeddings to each batch
+        # obtain the positions of the units (shape [1, units]])
+        positions = torch.arange(out.shape[1], device=out.device).unsqueeze(0)
+        # repeat the positions for each batch (shape [batch, units]])
+        positions = positions.repeat(out.shape[0], 1)
+        # obtain the positional embeddings (shape [batch, units, signature_terms])
+        position_embeddings = self.position_embeddings(positions)
+        # add the positional embeddings to the output of the SWMHAU
+        out = out + position_embeddings
+
         # prepend a classification token to the outputs of the SWMHAU
-        # so out has dimensions [batch, units+1, hidden_dim]
+        # so out has dimensions [batch, units+1, signature_terms]
         out = torch.cat([self.cls_token.repeat(out.shape[0], 1, 1), out], dim=1)
 
         # apply MHA to the output of the SWMHAUs
