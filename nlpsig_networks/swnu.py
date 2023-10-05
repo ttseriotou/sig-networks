@@ -207,6 +207,8 @@ class SWLSTM(nn.Module):
             # add element-wise the forward and backward LSTM states
             if self.BiLSTM:
                 out = h_n[-1, :, :] + h_n[-2, :, :]
+            else:
+                out = h_n[-1, :, :]
             # reverse sequence padding
             out = out[inverse_perm]
         else:
