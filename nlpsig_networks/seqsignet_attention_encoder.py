@@ -192,6 +192,9 @@ class SeqSigNetAttentionEncoder(nn.Module):
         # unflatten out to have dimensions [batch, units, signature_terms]
         out = out.unflatten(0, (path.shape[0], path.shape[1]))
 
+        # obtain padding mask on the outputs of SWMHAU
+        mask = obtain_signatures_mask(out)
+
         # add positional embeddings to each batch
         # obtain the positions of the units (shape [1, units]])
         positions = torch.arange(out.shape[1], device=out.device).unsqueeze(0)
@@ -210,8 +213,6 @@ class SeqSigNetAttentionEncoder(nn.Module):
         out = torch.cat([self.cls_token.repeat(out.shape[0], 1, 1), out], dim=1)
 
         # apply MHA to the output of the SWMHAUs
-        # obtain padding mask on the outputs of SWMHAU
-        mask = obtain_signatures_mask(out)
         out = self.transformer_encoder(out, key_padding_mask=mask)[0]
 
         # extract the classification token output
