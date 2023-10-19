@@ -125,9 +125,9 @@ class SeqSigNetAttentionEncoder(nn.Module):
             hidden_dim_aug=hidden_dim_aug,
         )
 
-        # initialise absolute position embeddings for the units
+        # initialise absolute position embeddings for the units (and CLS token)
         self.position_embeddings = nn.Embedding(
-            num_units, self.swmhau.swmha.signature_terms
+            num_units + 1, self.swmhau.swmha.signature_terms
         )
         # layer norm and dropout after adding the position embeddings
         self.position_embedding_layer_norm = nn.LayerNorm(
@@ -192,6 +192,9 @@ class SeqSigNetAttentionEncoder(nn.Module):
         # unflatten out to have dimensions [batch, units, signature_terms]
         out = out.unflatten(0, (path.shape[0], path.shape[1]))
 
+        # prepend a classification token (shape [batch, units+1, signature_terms])
+        out = torch.cat([self.cls_token.repeat(out.shape[0], 1, 1), out], dim=1)
+
         # obtain padding mask on the outputs of SWMHAU
         mask = obtain_signatures_mask(out)
 
@@ -204,9 +207,6 @@ class SeqSigNetAttentionEncoder(nn.Module):
         position_embeddings = self.position_embeddings(positions)
         # add the positional embeddings to the output of the SWMHAU
         out = out + position_embeddings
-
-        # prepend a classification token (shape [batch, units+1, signature_terms])
-        out = torch.cat([self.cls_token.repeat(out.shape[0], 1, 1), out], dim=1)
 
         # apply MHA to the output of the SWMHAUs
         out = self.transformer_encoder(out, src_key_padding_mask=mask)
