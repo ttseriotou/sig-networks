@@ -62,7 +62,7 @@ def obtain_SeqSigNet_input(
 
     # obtain path by using PrepareData class and .pad method
     paths = nlpsig.PrepareData(
-        df,
+        original_df=df,
         id_column=id_column,
         label_column=label_column,
         embeddings=embeddings,
@@ -304,8 +304,8 @@ def seqsignet_hyperparameter_search(
                                             y_data=y_data,
                                             input_channels=input["input_channels"],
                                             output_channels=output_channels,
-                                            embedding_dim=input["embedding_dim"],
                                             num_features=input["num_features"],
+                                            embedding_dim=input["embedding_dim"],
                                             log_signature=log_signature,
                                             sig_depth=sig_depth,
                                             pooling=pooling,
@@ -486,8 +486,8 @@ def seqsignet_hyperparameter_search(
             y_data=y_data,
             input_channels=checkpoint["extra_info"]["input_channels"],
             output_channels=checkpoint["extra_info"]["output_channels"],
-            embedding_dim=input["embedding_dim"],
             num_features=input["num_features"],
+            embedding_dim=input["embedding_dim"],
             log_signature=checkpoint["extra_info"]["log_signature"],
             sig_depth=checkpoint["extra_info"]["sig_depth"],
             pooling=checkpoint["extra_info"]["pooling"],
@@ -501,6 +501,7 @@ def seqsignet_hyperparameter_search(
             seed=seed,
             loss=loss,
             gamma=gamma,
+            device=device,
             batch_size=batch_size,
             augmentation_type=checkpoint["extra_info"]["augmentation_type"],
             hidden_dim_aug=checkpoint["extra_info"]["hidden_dim_aug"],
