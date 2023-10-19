@@ -26,6 +26,7 @@ class SWMHAUNetwork(nn.Module):
         hidden_dim_ffn: list[int] | int,
         output_dim: int,
         dropout_rate: float,
+        pooling: str,
         reverse_path: bool = False,
         augmentation_type: str = "Conv1d",
         hidden_dim_aug: list[int] | int | None = None,
@@ -58,7 +59,13 @@ class SWMHAUNetwork(nn.Module):
         output_dim : int
             Dimension of the output layer in the FFN.
         dropout_rate : float
-            Dropout rate in the FFN.
+            Dropout rate in the FFN and SWMHAU.
+        pooling: str | None
+            Pooling operation to apply in SWMHAU to obtain history representation.
+            Options are:
+                - "signature": apply signature on a FFN of the MHA units at the end
+                  to obtain the final history representation
+                - "cls": introduce a CLS token and return the MHA output for this token
         reverse_path : bool, optional
             Whether or not to reverse the path before passing it through the
             signature layers, by default False.
@@ -92,6 +99,8 @@ class SWMHAUNetwork(nn.Module):
             sig_depth=sig_depth,
             num_heads=num_heads,
             num_layers=num_layers,
+            dropout_rate=dropout_rate,
+            pooling=pooling,
             reverse_path=reverse_path,
             augmentation_type=augmentation_type,
             hidden_dim_aug=hidden_dim_aug,

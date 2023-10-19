@@ -62,7 +62,7 @@ def obtain_SeqSigNet_input(
 
     # obtain path by using PrepareData class and .pad method
     paths = nlpsig.PrepareData(
-        df,
+        original_df=df,
         id_column=id_column,
         label_column=label_column,
         embeddings=embeddings,
@@ -91,6 +91,7 @@ def implement_seqsignet(
     embedding_dim: int,
     log_signature: bool,
     sig_depth: int,
+    pooling: str,
     swnu_hidden_dim: list[int] | int,
     lstm_hidden_dim: int,
     ffn_hidden_dim: list[int] | int,
@@ -127,6 +128,7 @@ def implement_seqsignet(
         "embedding_dim": embedding_dim,
         "log_signature": log_signature,
         "sig_depth": sig_depth,
+        "pooling": pooling,
         "hidden_dim_swnu": swnu_hidden_dim,
         "hidden_dim_lstm": lstm_hidden_dim,
         "hidden_dim_ffn": ffn_hidden_dim,
@@ -195,6 +197,7 @@ def seqsignet_hyperparameter_search(
     dim_reduce_methods: list[str],
     dimensions: list[int],
     log_signature: bool,
+    pooling: str,
     swnu_hidden_dim_sizes_and_sig_depths: list[tuple[int, list[int] | list[list[int]]]],
     lstm_hidden_dim_sizes: list[int],
     ffn_hidden_dim_sizes: list[int] | list[list[int]],
@@ -301,10 +304,11 @@ def seqsignet_hyperparameter_search(
                                             y_data=y_data,
                                             input_channels=input["input_channels"],
                                             output_channels=output_channels,
-                                            embedding_dim=input["embedding_dim"],
                                             num_features=input["num_features"],
+                                            embedding_dim=input["embedding_dim"],
                                             log_signature=log_signature,
                                             sig_depth=sig_depth,
+                                            pooling=pooling,
                                             swnu_hidden_dim=swnu_hidden_dim,
                                             lstm_hidden_dim=lstm_hidden_dim,
                                             ffn_hidden_dim=ffn_hidden_dim,
@@ -364,6 +368,7 @@ def seqsignet_hyperparameter_search(
                                         ]
                                         results["num_features"] = input["num_features"]
                                         results["log_signature"] = log_signature
+                                        results["pooling"] = pooling
                                         results["swnu_hidden_dim"] = [
                                             tuple(swnu_hidden_dim)
                                             for _ in range(len(results.index))
@@ -436,6 +441,7 @@ def seqsignet_hyperparameter_search(
                                             "embedding_dim": input["embedding_dim"],
                                             "num_features": input["num_features"],
                                             "log_signature": log_signature,
+                                            "pooling": pooling,
                                             "swnu_hidden_dim": swnu_hidden_dim,
                                             "lstm_hidden_dim": lstm_hidden_dim,
                                             "ffn_hidden_dim": ffn_hidden_dim,
@@ -478,22 +484,24 @@ def seqsignet_hyperparameter_search(
             num_epochs=num_epochs,
             x_data=input["x_data"],
             y_data=y_data,
-            sig_depth=checkpoint["extra_info"]["sig_depth"],
             input_channels=checkpoint["extra_info"]["input_channels"],
             output_channels=checkpoint["extra_info"]["output_channels"],
-            embedding_dim=input["embedding_dim"],
             num_features=input["num_features"],
-            log_signature=log_signature,
-            output_dim=output_dim,
+            embedding_dim=input["embedding_dim"],
+            log_signature=checkpoint["extra_info"]["log_signature"],
+            sig_depth=checkpoint["extra_info"]["sig_depth"],
+            pooling=checkpoint["extra_info"]["pooling"],
             swnu_hidden_dim=checkpoint["extra_info"]["swnu_hidden_dim"],
             lstm_hidden_dim=checkpoint["extra_info"]["lstm_hidden_dim"],
             ffn_hidden_dim=checkpoint["extra_info"]["ffn_hidden_dim"],
+            output_dim=output_dim,
             BiLSTM=checkpoint["extra_info"]["BiLSTM"],
             dropout_rate=checkpoint["extra_info"]["dropout_rate"],
             learning_rate=checkpoint["extra_info"]["learning_rate"],
             seed=seed,
             loss=loss,
             gamma=gamma,
+            device=device,
             batch_size=batch_size,
             augmentation_type=checkpoint["extra_info"]["augmentation_type"],
             hidden_dim_aug=checkpoint["extra_info"]["hidden_dim_aug"],
@@ -531,6 +539,7 @@ def seqsignet_hyperparameter_search(
         test_results["embedding_dim"] = input["embedding_dim"]
         test_results["num_features"] = input["num_features"]
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
+        test_results["pooling"] = checkpoint["extra_info"]["pooling"]
         test_results["swnu_hidden_dim"] = [
             tuple(checkpoint["extra_info"]["swnu_hidden_dim"])
             for _ in range(len(test_results.index))

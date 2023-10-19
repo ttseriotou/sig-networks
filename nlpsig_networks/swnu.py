@@ -24,6 +24,7 @@ class SWLSTM(nn.Module):
         log_signature: bool,
         sig_depth: int,
         hidden_dim: list[int] | int,
+        pooling: str | None,
         reverse_path: bool = False,
         BiLSTM: bool = False,
     ):
@@ -41,6 +42,14 @@ class SWLSTM(nn.Module):
             The depth to truncate the path signature at.
         hidden_dim : list[int] | int
             Dimensions of the hidden layers in the LSTM blocks in the SWLSTM.
+        pooling: str | None
+            Pooling operation to apply. If None, no pooling is applied.
+            Options are:
+                - "signature": apply signature on the LSTM units at the end
+                  to obtain the final history representation
+                - "lstm": take the final (non-padded) LSTM unit as the final
+                  history representation
+                - None: no pooling is applied (return the final LSTM units)
         reverse_path : bool, optional
             Whether or not to reverse the path before passing it through the
             signature layers, by default False.
@@ -55,7 +64,14 @@ class SWLSTM(nn.Module):
         self.log_signature = log_signature
         if isinstance(hidden_dim, int):
             hidden_dim = [hidden_dim]
+        self.sig_depth = sig_depth
         self.hidden_dim = hidden_dim
+        self.pooling = pooling
+        if self.pooling not in ["signature", "lstm", None]:
+            raise ValueError(
+                "`pooling` must be 'signature', 'lstm' or None. "
+                f"Got {self.pooling} instead."
+            )
         self.reverse_path = reverse_path
         self.BiLSTM = BiLSTM
 
@@ -66,24 +82,28 @@ class SWLSTM(nn.Module):
             # create expanding window signature layer and
             # compute the input dimension to LSTM
             if self.log_signature:
-                self.signature_layers.append(LogSignature(depth=sig_depth, stream=True))
+                self.signature_layers.append(
+                    LogSignature(depth=self.sig_depth, stream=True)
+                )
                 if layer == 0:
                     input_dim_lstm = logsignature_channels(
-                        in_channels=input_size, depth=sig_depth
+                        in_channels=input_size, depth=self.sig_depth
                     )
                 else:
                     input_dim_lstm = logsignature_channels(
-                        in_channels=self.hidden_dim[layer - 1], depth=sig_depth
+                        in_channels=self.hidden_dim[layer - 1], depth=self.sig_depth
                     )
             else:
-                self.signature_layers.append(Signature(depth=sig_depth, stream=True))
+                self.signature_layers.append(
+                    Signature(depth=self.sig_depth, stream=True)
+                )
                 if layer == 0:
                     input_dim_lstm = signature_channels(
-                        channels=input_size, depth=sig_depth
+                        channels=input_size, depth=self.sig_depth
                     )
                 else:
                     input_dim_lstm = signature_channels(
-                        channels=self.hidden_dim[layer - 1], depth=sig_depth
+                        channels=self.hidden_dim[layer - 1], depth=self.sig_depth
                     )
 
             # create LSTM layer (if last layer, this can be a BiLSTM)
@@ -103,11 +123,21 @@ class SWLSTM(nn.Module):
         self.signature_layers = nn.ModuleList(self.signature_layers)
         self.lstm_layers = nn.ModuleList(self.lstm_layers)
 
-        # final signature without lift (i.e. no expanding windows)
-        if self.log_signature:
-            self.signature2 = LogSignature(depth=sig_depth, stream=False)
+        if self.pooling == "signature":
+            # final signature without lift (i.e. no expanding windows)
+            if self.log_signature:
+                self.final_signature = LogSignature(depth=self.sig_depth, stream=False)
+                self.output_dim = logsignature_channels(
+                    in_channels=self.hidden_dim[-1], depth=self.sig_depth
+                )
+            else:
+                self.final_signature = Signature(depth=self.sig_depth, stream=False)
+                self.output_dim = signature_channels(
+                    channels=self.hidden_dim[-1], depth=self.sig_depth
+                )
         else:
-            self.signature2 = Signature(depth=sig_depth, stream=False)
+            self.final_signature = None
+            self.output_dim = self.hidden_dim[-1]
 
     def forward(self, x: torch.Tensor):
         # x has dimensions [batch, length of signal, channels]
@@ -136,18 +166,25 @@ class SWLSTM(nn.Module):
             mask = obtain_signatures_mask(x)
             # obtain the length of the stream for each item in the batch dimension
             seq_lengths = torch.sum(~mask, 1)
-            seq_lengths, perm_idx = seq_lengths.sort(0, descending=True)
+            seq_lengths_sorted, perm_idx = seq_lengths.sort(0, descending=True)
             x = x[perm_idx]
             x = torch.nn.utils.rnn.pack_padded_sequence(
-                x, seq_lengths.cpu(), batch_first=True
+                x, seq_lengths_sorted.cpu(), batch_first=True
             )
 
             # apply LSTM layer
-            x, _ = self.lstm_layers[layer](x)
+            x, (h_n, _) = self.lstm_layers[layer](x)
+
+            # reverse sequence padding
+            inverse_perm = torch.argsort(perm_idx)
+
+            if layer == len(self.hidden_dim) - 1 and self.pooling == "lstm":
+                # don't need to deal with outputs of LSTM if we are
+                # pooling by taking the last hidden state
+                continue
 
             # reverse soring of sequences
             x, _ = torch.nn.utils.rnn.pad_packed_sequence(x, batch_first=True)
-            inverse_perm = torch.argsort(perm_idx)
             x = x[inverse_perm]
 
             # if last layer and using BiLSTM, need to add element-wise
@@ -163,8 +200,20 @@ class SWLSTM(nn.Module):
             if x.shape[1] == 1:
                 x = x.repeat(1, stream_dim, 1)
 
-        # take final signature
-        out = self.signature2(x)
+        if self.pooling == "signature":
+            # take final signature
+            out = self.final_signature(x)
+        elif self.pooling == "lstm":
+            # add element-wise the forward and backward LSTM states
+            if self.BiLSTM:
+                out = h_n[-1, :, :] + h_n[-2, :, :]
+            else:
+                out = h_n[-1, :, :]
+            # reverse sequence padding
+            out = out[inverse_perm]
+        else:
+            # no pooling, so return the final LSTM units
+            out = x
 
         return out
 
@@ -180,9 +229,10 @@ class SWNU(nn.Module):
         log_signature: bool,
         sig_depth: int,
         hidden_dim: list[int] | int,
+        pooling: str | None,
+        output_channels: int | None = None,
         reverse_path: bool = False,
         BiLSTM: bool = False,
-        output_channels: int | None = None,
         augmentation_type: str = "Conv1d",
         hidden_dim_aug: list[int] | int | None = None,
     ):
@@ -199,6 +249,14 @@ class SWNU(nn.Module):
             The depth to truncate the path signature at.
         hidden_dim : list[int] | int
             Dimensions of the hidden layers in the SNWU blocks.
+        pooling: str | None
+            Pooling operation to apply. If None, no pooling is applied.
+            Options are:
+                - "signature": apply signature on the LSTM units at the end
+                  to obtain the final history representation
+                - "lstm": take the final (non-padded) LSTM unit as the final
+                  history representation
+                - None: no pooling is applied
         output_channels : int | None, optional
             Requested dimension of the embeddings after convolution layer.
             If None, will be set to the last item in `hidden_dim`, by default None.
@@ -227,6 +285,8 @@ class SWNU(nn.Module):
         if isinstance(hidden_dim, int):
             hidden_dim = [hidden_dim]
         self.hidden_dim = hidden_dim
+
+        self.pooling = pooling
 
         self.output_channels = (
             output_channels if output_channels is not None else hidden_dim[-1]
@@ -270,9 +330,10 @@ class SWNU(nn.Module):
         # signature window & LSTM blocks
         self.swlstm = SWLSTM(
             input_size=self.output_channels,
-            hidden_dim=self.hidden_dim,
             log_signature=self.log_signature,
             sig_depth=self.sig_depth,
+            hidden_dim=self.hidden_dim,
+            pooling=self.pooling,
             reverse_path=self.reverse_path,
             BiLSTM=self.BiLSTM,
         )
