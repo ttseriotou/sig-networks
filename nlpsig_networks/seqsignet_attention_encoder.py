@@ -104,7 +104,7 @@ class SeqSigNetAttentionEncoder(nn.Module):
         """
         super(SeqSigNetAttentionEncoder, self).__init__()
 
-        if self.transformer_encoder_layers < 1:
+        if transformer_encoder_layers < 1:
             raise ValueError(
                 "`transformer_encoder_layers` must be at least 1. "
                 f"Got {transformer_encoder_layers} instead."
@@ -203,17 +203,13 @@ class SeqSigNetAttentionEncoder(nn.Module):
         # obtain the positional embeddings (shape [batch, units, signature_terms])
         position_embeddings = self.position_embeddings(positions)
         # add the positional embeddings to the output of the SWMHAU
-        out += position_embeddings
-
-        # apply layer norm and dropout
-        out = self.position_embedding_layer_norm(out)
-        out = self.position_embedding_dropout(out)
+        out = out + position_embeddings
 
         # prepend a classification token (shape [batch, units+1, signature_terms])
         out = torch.cat([self.cls_token.repeat(out.shape[0], 1, 1), out], dim=1)
 
         # apply MHA to the output of the SWMHAUs
-        out = self.transformer_encoder(out, key_padding_mask=mask)[0]
+        out = self.transformer_encoder(out, src_key_padding_mask=mask)
 
         # extract the classification token output
         out = out[:, 0, :]

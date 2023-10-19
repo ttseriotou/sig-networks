@@ -27,6 +27,7 @@ def implement_seqsignet_attention_encoder(
     log_signature: bool,
     sig_depth: int,
     pooling: str,
+    transformer_encoder_layers: int,
     num_heads: int,
     num_layers: int,
     num_units: int,
@@ -70,6 +71,7 @@ def implement_seqsignet_attention_encoder(
         "output_dim": output_dim,
         "dropout_rate": dropout_rate,
         "pooling": pooling,
+        "transformer_encoder_layers": transformer_encoder_layers,
         "augmentation_type": augmentation_type,
         "hidden_dim_aug": hidden_dim_aug,
         "comb_method": comb_method,
@@ -134,6 +136,7 @@ def seqsignet_attention_encoder_hyperparameter_search(
     dimensions: list[int],
     log_signature: bool,
     pooling: str,
+    transformer_encoder_layers: int,
     swmhau_parameters: list[tuple[int, int, int]],
     num_layers: list[int],
     ffn_hidden_dim_sizes: list[int] | list[list[int]],
@@ -234,11 +237,12 @@ def seqsignet_attention_encoder_hyperparameter_search(
                                         y_data=y_data,
                                         input_channels=input["input_channels"],
                                         output_channels=output_channels,
-                                        embedding_dim=input["embedding_dim"],
                                         num_features=input["num_features"],
+                                        embedding_dim=input["embedding_dim"],
                                         log_signature=log_signature,
                                         sig_depth=sig_depth,
                                         pooling=pooling,
+                                        transformer_encoder_layers=transformer_encoder_layers,
                                         num_heads=num_heads,
                                         num_layers=n_layers,
                                         num_units=n,
@@ -293,6 +297,9 @@ def seqsignet_attention_encoder_hyperparameter_search(
                                     results["num_features"] = input["num_features"]
                                     results["log_signature"] = log_signature
                                     results["pooling"] = pooling
+                                    results[
+                                        "transformer_encoder_layers"
+                                    ] = transformer_encoder_layers
                                     results["num_heads"] = num_heads
                                     results["num_layers"] = n_layers
                                     results["ffn_hidden_dim"] = [
@@ -358,6 +365,9 @@ def seqsignet_attention_encoder_hyperparameter_search(
                                         "num_features": input["num_features"],
                                         "log_signature": log_signature,
                                         "pooling": pooling,
+                                        "transformer_encoder_layers": (
+                                            transformer_encoder_layers
+                                        ),
                                         "num_heads": num_heads,
                                         "num_layers": n_layers,
                                         "ffn_hidden_dim": ffn_hidden_dim,
@@ -401,13 +411,17 @@ def seqsignet_attention_encoder_hyperparameter_search(
             y_data=y_data,
             input_channels=checkpoint["extra_info"]["input_channels"],
             output_channels=checkpoint["extra_info"]["output_channels"],
-            embedding_dim=input["embedding_dim"],
             num_features=input["num_features"],
+            embedding_dim=input["embedding_dim"],
             log_signature=checkpoint["extra_info"]["log_signature"],
             sig_depth=checkpoint["extra_info"]["sig_depth"],
             pooling=checkpoint["extra_info"]["pooling"],
+            transformer_encoder_layers=checkpoint["extra_info"][
+                "transformer_encoder_layers"
+            ],
             num_heads=checkpoint["extra_info"]["num_heads"],
             num_layers=checkpoint["extra_info"]["num_layers"],
+            num_units=checkpoint["extra_info"]["n"],
             ffn_hidden_dim=checkpoint["extra_info"]["ffn_hidden_dim"],
             output_dim=output_dim,
             dropout_rate=checkpoint["extra_info"]["dropout_rate"],
@@ -415,6 +429,7 @@ def seqsignet_attention_encoder_hyperparameter_search(
             seed=seed,
             loss=loss,
             gamma=gamma,
+            device=device,
             batch_size=batch_size,
             augmentation_type=checkpoint["extra_info"]["augmentation_type"],
             hidden_dim_aug=checkpoint["extra_info"]["hidden_dim_aug"],
@@ -453,6 +468,9 @@ def seqsignet_attention_encoder_hyperparameter_search(
         test_results["num_features"] = input["num_features"]
         test_results["log_signature"] = checkpoint["extra_info"]["log_signature"]
         test_results["pooling"] = checkpoint["extra_info"]["pooling"]
+        test_results["transformer_encoder_layers"] = checkpoint["extra_info"][
+            "transformer_encoder_layers"
+        ]
         test_results["num_heads"] = checkpoint["extra_info"]["num_heads"]
         test_results["num_layers"] = checkpoint["extra_info"]["num_layers"]
         test_results["ffn_hidden_dim"] = [
