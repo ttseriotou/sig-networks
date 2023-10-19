@@ -114,12 +114,12 @@ def _fine_tune_transformer_for_data_split(
     seed: int,
     loss: str,
     gamma: float = 0.0,
+    device: str | None = None,
     batch_size: int = 64,
     path_indices: list | np.array | None = None,
     split_indices: tuple[Iterable[int] | None] | None = None,
     save_model: bool = False,
     output_dir: str | None = None,
-    device: str | None = None,
     verbose: bool = False,
 ) -> dict[str, float | list[float]]:
     """
@@ -253,6 +253,8 @@ def fine_tune_transformer_for_classification(
     seed: int,
     loss: str,
     gamma: float = 0.0,
+    device: str | None = None,
+    batch_size: int = 64,
     path_indices: list | np.array | None = None,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
@@ -262,7 +264,6 @@ def fine_tune_transformer_for_classification(
     k_fold: bool = False,
     n_splits: int = 5,
     return_metric_for_each_fold: bool = False,
-    device: str | None = None,
     verbose: bool = False,
 ):
     """
@@ -312,13 +313,14 @@ def fine_tune_transformer_for_classification(
                 df=df,
                 feature_name=feature_name,
                 label_column=label_column,
-                path_indices=path_indices,
-                split_indices=folds.fold_indices[k],
                 seed=seed,
                 loss=loss,
                 gamma=gamma,
-                save_model=False,
                 device=device,
+                batch_size=batch_size,
+                path_indices=path_indices,
+                split_indices=folds.fold_indices[k],
+                save_model=False,
                 verbose=verbose,
             )
 
@@ -387,18 +389,19 @@ def fine_tune_transformer_for_classification(
 
         # compute how well the model performs on this data split
         results = _fine_tune_transformer_for_data_split(
+            num_epochs=num_epochs,
             pretrained_model_name=pretrained_model_name,
             df=df,
             feature_name=feature_name,
             label_column=label_column,
-            path_indices=path_indices,
-            split_indices=split_data.indices,
             seed=seed,
             loss=loss,
             gamma=gamma,
-            num_epochs=num_epochs,
-            save_model=False,
             device=device,
+            batch_size=batch_size,
+            path_indices=path_indices,
+            split_indices=split_data.indices,
+            save_model=False,
             verbose=verbose,
         )
 
@@ -424,6 +427,8 @@ def fine_tune_transformer_average_seed(
     seeds: list[int],
     loss: str,
     gamma: float = 0.0,
+    device: str | None = None,
+    batch_size: int = 64,
     path_indices: list | np.array | None = None,
     data_split_seed: int = 0,
     split_ids: torch.Tensor | None = None,
@@ -435,7 +440,6 @@ def fine_tune_transformer_average_seed(
     validation_metric: str = "f1",
     return_metric_for_each_fold: bool = False,
     results_output: str | None = None,
-    device: str | None = None,
     verbose: bool = False,
 ):
     """
@@ -457,14 +461,15 @@ def fine_tune_transformer_average_seed(
             seed=seed,
             loss=loss,
             gamma=gamma,
+            device=device,
+            batch_size=batch_size,
             path_indices=path_indices,
             data_split_seed=data_split_seed,
-            k_fold=k_fold,
-            n_splits=n_splits,
             split_ids=split_ids,
             split_indices=split_indices,
+            k_fold=k_fold,
+            n_splits=n_splits,
             return_metric_for_each_fold=return_metric_for_each_fold,
-            device=device,
             verbose=verbose,
         )
 
