@@ -45,7 +45,9 @@ def testing_transformer(
     # loop through test set and make prediction from model
     predicted = [None for _ in range(len(test_dataset))]
     for i in tqdm(range(len(test_dataset))):
-        inputs = tokenizer(test_dataset[feature_name][i], return_tensors="pt")
+        inputs = tokenizer(
+            test_dataset[feature_name][i], truncation=True, return_tensors="pt"
+        )
 
         # set model to device is passed
         if isinstance(device, str):
