@@ -125,7 +125,7 @@ class SeqSigNet(nn.Module):
         # BiLSTM that processes the outputs from SWNUs for each window
         self.hidden_dim_lstm = hidden_dim_lstm
         self.lstm_sig = nn.LSTM(
-            input_size=self.self.swnu.swlstm.output_dim,
+            input_size=self.swnu.swlstm.output_dim,
             hidden_size=self.hidden_dim_lstm,
             num_layers=1,
             batch_first=True,
