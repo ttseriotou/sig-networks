@@ -827,7 +827,7 @@ def KFold_pytorch(
         recall_scores.append(test_results["recall_scores"])
 
         if valid is not None:
-            # test and evaluate on the validation set
+            # evaluate on the validation set
             valid_results = testing_pytorch(
                 model=model,
                 test_loader=valid,
@@ -845,10 +845,10 @@ def KFold_pytorch(
             valid_accuracy.append(valid_results["accuracy"])
             valid_f1.append(valid_results["f1"])
             valid_f1_scores.append(valid_results["f1_scores"])
-            valid_precision.append(test_results["precision"])
-            valid_precision_scores.append(test_results["precision_scores"])
-            valid_recall.append(test_results["recall"])
-            valid_recall_scores.append(test_results["recall_scores"])
+            valid_precision.append(valid_results["precision"])
+            valid_precision_scores.append(valid_results["precision_scores"])
+            valid_recall.append(valid_results["recall"])
+            valid_recall_scores.append(valid_results["recall_scores"])
         else:
             valid_loss.append(None)
             valid_accuracy.append(None)
