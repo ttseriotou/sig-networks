@@ -158,6 +158,9 @@ def _fine_tune_transformer_for_data_split(
 
     # create column named "label_as_id" which are the corresponding IDs
     df["label_as_id"] = df[label_column].apply(lambda x: label_to_id[str(x)])
+    # create labels column
+    # NOTE: this is needed for using a custom loss in TextEncoder class
+    df["labels"] = df["label_as_id"]
 
     # initialise model, tokenizer and data_collator
     model = AutoModelForSequenceClassification.from_pretrained(
@@ -214,7 +217,7 @@ def _fine_tune_transformer_for_data_split(
         f1 = f1.compute(
             predictions=predictions, references=eval_pred.label_ids, average="macro"
         )["f1"]
-        return {"accuracy": accuracy, "f1": f1}
+        return {"validation accuracy": accuracy, "validation F1": f1}
 
     text_encoder.set_up_trainer(
         data_collator=data_collator,

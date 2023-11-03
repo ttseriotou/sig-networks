@@ -124,7 +124,6 @@ class SeqSigNetAttentionBiLSTM(nn.Module):
             hidden_size=self.hidden_dim_lstm,
             num_layers=1,
             batch_first=True,
-            dropout=dropout_rate,
             bidirectional=True,
         )
 
