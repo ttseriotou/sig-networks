@@ -12,13 +12,11 @@ from datasets.arrow_dataset import Dataset
 from nlpsig import TextEncoder
 from nlpsig.classification_utils import DataSplits, Folds
 from sklearn import metrics
-from tqdm.auto import tqdm
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DataCollatorWithPadding,
-    PreTrainedModel,
-    PreTrainedTokenizer,
+    Trainer,
 )
 
 from nlpsig_networks.focal_loss import FocalLoss
@@ -26,43 +24,20 @@ from nlpsig_networks.pytorch_utils import set_seed
 
 
 def testing_transformer(
-    model: PreTrainedModel,
-    tokenizer: PreTrainedTokenizer,
+    trainer: Trainer,
     test_dataset: Dataset,
-    feature_name: str,
-    device: str | None = None,
     verbose: bool = False,
 ) -> dict[str, float | list[float]]:
     """
     Function to evaluate a transformer model by computing the accuracy
     and F1 score.
     """
-
-    # set model to device is passed
-    if isinstance(device, str):
-        model.to(device)
-
-    # loop through test set and make prediction from model
-    predicted = [None for _ in range(len(test_dataset))]
-    for i in tqdm(range(len(test_dataset))):
-        inputs = tokenizer(
-            test_dataset[feature_name][i], truncation=True, return_tensors="pt"
-        )
-
-        # set model to device is passed
-        if isinstance(device, str):
-            inputs.to(device)
-
-        # obtain logits for input
-        with torch.no_grad():
-            logits = model(**inputs).logits
-
-        # store prediction
-        predicted[i] = logits.argmax().item()
-
+    predictions = trainer.predict(test_dataset)
+    predicted = np.argmax(predictions.predictions, axis=-1)
+    
     # convert to torch tensor
     predicted = torch.tensor(predicted)
-    labels = torch.tensor(test_dataset["label_as_id"])
+    labels = torch.tensor(predictions.label_ids)
 
     # compute accuracy
     accuracy = ((predicted == labels).sum() / len(labels)).item()
@@ -113,6 +88,9 @@ def _fine_tune_transformer_for_data_split(
     df: pd.DataFrame,
     feature_name: str,
     label_column: str,
+    label_to_id: dict[str, int],
+    id_to_label: dict[int, str],
+    output_dim: int,
     seed: int,
     loss: str,
     gamma: float = 0.0,
@@ -128,7 +106,6 @@ def _fine_tune_transformer_for_data_split(
     Function to fine-tune and evalaute a model for a given
     data_split (via split_indices)
     """
-
     # set seed
     set_seed(seed)
 
@@ -140,14 +117,9 @@ def _fine_tune_transformer_for_data_split(
     if path_indices is not None:
         df = df.iloc[path_indices].reset_index(drop=True)
 
-    # obtain y_data and create dictionary for converting label_to_id and id_to_label
-    y_data = df[label_column]
-    label_to_id = {str(y_data.unique()[i]): i for i in range(len(y_data.unique()))}
-    id_to_label = {v: k for k, v in label_to_id.items()}
-    output_dim = len(label_to_id.values())
-
     # define loss
     if loss == "focal":
+        y_data = df[label_column]
         criterion = FocalLoss(gamma=gamma)
         y_train = torch.tensor(y_data.apply(lambda x: label_to_id[str(x)]).values)
         criterion.set_alpha_from_y(y=y_train)
@@ -230,11 +202,8 @@ def _fine_tune_transformer_for_data_split(
 
     # evaluate
     test_performance = testing_transformer(
-        model=text_encoder.model,
-        tokenizer=text_encoder.tokenizer,
+        trainer=text_encoder.trainer,
         test_dataset=text_encoder.dataset_split["test"],
-        feature_name=feature_name,
-        device=device,
         verbose=verbose,
     )
 
@@ -255,6 +224,9 @@ def fine_tune_transformer_for_classification(
     df: pd.DataFrame,
     feature_name: str,
     label_column: str,
+    label_to_id: dict[str, int],
+    id_to_label: dict[int, str],
+    output_dim: int,
     seed: int,
     loss: str,
     gamma: float = 0.0,
@@ -275,7 +247,6 @@ def fine_tune_transformer_for_classification(
     Function to fine-tune and evaluate a model by either using k_fold
     evaluation or a standard train/valid/test split.
     """
-
     # set seed
     set_seed(seed)
 
@@ -318,6 +289,9 @@ def fine_tune_transformer_for_classification(
                 df=df,
                 feature_name=feature_name,
                 label_column=label_column,
+                label_to_id=label_to_id,
+                id_to_label=id_to_label,
+                output_dim=output_dim,
                 seed=seed,
                 loss=loss,
                 gamma=gamma,
@@ -399,6 +373,9 @@ def fine_tune_transformer_for_classification(
             df=df,
             feature_name=feature_name,
             label_column=label_column,
+            label_to_id=label_to_id,
+            id_to_label=id_to_label,
+            output_dim=output_dim,
             seed=seed,
             loss=loss,
             gamma=gamma,
@@ -429,6 +406,9 @@ def fine_tune_transformer_average_seed(
     df: pd.DataFrame,
     feature_name: str,
     label_column: str,
+    label_to_id: dict[str, int],
+    id_to_label: dict[int, str],
+    output_dim: int,
     seeds: list[int],
     loss: str,
     gamma: float = 0.0,
@@ -463,6 +443,9 @@ def fine_tune_transformer_average_seed(
             df=df,
             feature_name=feature_name,
             label_column=label_column,
+            label_to_id=label_to_id,
+            id_to_label=id_to_label,
+            output_dim=output_dim,
             seed=seed,
             loss=loss,
             gamma=gamma,
