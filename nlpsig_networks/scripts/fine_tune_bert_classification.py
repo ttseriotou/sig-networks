@@ -18,9 +18,10 @@ from transformers import (
     DataCollatorWithPadding,
     Trainer,
 )
+from tqdm.auto import tqdm
 
 from nlpsig_networks.focal_loss import FocalLoss
-from nlpsig_networks.pytorch_utils import set_seed
+from nlpsig_networks.pytorch_utils import SaveBestModel, _get_timestamp, set_seed
 
 
 def testing_transformer(
@@ -34,7 +35,7 @@ def testing_transformer(
     """
     predictions = trainer.predict(test_dataset)
     predicted = np.argmax(predictions.predictions, axis=-1)
-    
+
     # convert to torch tensor
     predicted = torch.tensor(predicted)
     labels = torch.tensor(predictions.label_ids)
@@ -91,6 +92,7 @@ def _fine_tune_transformer_for_data_split(
     label_to_id: dict[str, int],
     id_to_label: dict[int, str],
     output_dim: int,
+    learning_rate: float,
     seed: int,
     loss: str,
     gamma: float = 0.0,
@@ -173,8 +175,11 @@ def _fine_tune_transformer_for_data_split(
         num_train_epochs=num_epochs,
         per_device_train_batch_size=batch_size,
         disable_tqdm=False,
+        evaluation_strategy="epoch",
+        learning_rate=learning_rate,
         save_strategy="epoch",
         load_best_model_at_end=True,
+        metric_for_best_model="Validation F1",
         seed=seed,
     )
 
@@ -189,7 +194,7 @@ def _fine_tune_transformer_for_data_split(
         f1 = f1.compute(
             predictions=predictions, references=eval_pred.label_ids, average="macro"
         )["f1"]
-        return {"validation accuracy": accuracy, "validation F1": f1}
+        return {"Validation Accuracy": accuracy, "Validation F1": f1}
 
     text_encoder.set_up_trainer(
         data_collator=data_collator,
@@ -200,7 +205,14 @@ def _fine_tune_transformer_for_data_split(
     # train model
     text_encoder.fit_transformer_with_trainer_api()
 
-    # evaluate
+    # evaluate on validation set
+    validation_performance = testing_transformer(
+        trainer=text_encoder.trainer,
+        test_dataset=text_encoder.dataset_split["validation"],
+        verbose=verbose,
+    )
+
+    # evaluate on test set
     test_performance = testing_transformer(
         trainer=text_encoder.trainer,
         test_dataset=text_encoder.dataset_split["test"],
@@ -215,7 +227,26 @@ def _fine_tune_transformer_for_data_split(
         if os.path.isdir(output_dir):
             shutil.rmtree(output_dir, ignore_errors=True)
 
-    return test_performance
+    return {
+        "predicted": test_performance["predicted"],
+        "labels": test_performance["labels"],
+        "accuracy": test_performance["accuracy"],
+        "f1": test_performance["f1"],
+        "f1_scores": [test_performance["f1_scores"]],
+        "precision": test_performance["precision"],
+        "precision_scores": [test_performance["precision_scores"]],
+        "recall": test_performance["recall"],
+        "recall_scores": [test_performance["recall_scores"]],
+        "valid_predicted": validation_performance["predicted"],
+        "valid_labels": validation_performance["labels"],
+        "valid_accuracy": validation_performance["accuracy"],
+        "valid_f1": validation_performance["f1"],
+        "valid_f1_scores": [validation_performance["f1_scores"]],
+        "valid_precision": validation_performance["precision"],
+        "valid_precision_scores": [validation_performance["precision_scores"]],
+        "valid_recall": validation_performance["recall"],
+        "valid_recall_scores": [validation_performance["recall_scores"]],
+    }
 
 
 def fine_tune_transformer_for_classification(
@@ -227,6 +258,7 @@ def fine_tune_transformer_for_classification(
     label_to_id: dict[str, int],
     id_to_label: dict[int, str],
     output_dim: int,
+    learning_rate: float,
     seed: int,
     loss: str,
     gamma: float = 0.0,
@@ -279,8 +311,20 @@ def fine_tune_transformer_for_classification(
         recall = []
         recall_scores = []
 
+        # create lists to record the metrics evaluated on the
+        # validation sets for each fold
+        valid_accuracy = []
+        valid_f1 = []
+        valid_f1_scores = []
+        valid_precision = []
+        valid_precision_scores = []
+        valid_recall = []
+        valid_recall_scores = []
+
         labels = torch.empty((0))
         predicted = torch.empty((0))
+        valid_labels = torch.empty((0))
+        valid_predicted = torch.empty((0))
         for k in range(n_splits):
             # compute how well the model performs on this fold
             results_for_fold = _fine_tune_transformer_for_data_split(
@@ -292,6 +336,7 @@ def fine_tune_transformer_for_classification(
                 label_to_id=label_to_id,
                 id_to_label=id_to_label,
                 output_dim=output_dim,
+                learning_rate=learning_rate,
                 seed=seed,
                 loss=loss,
                 gamma=gamma,
@@ -315,6 +360,22 @@ def fine_tune_transformer_for_classification(
             precision_scores.append(results_for_fold["precision_scores"])
             recall.append(results_for_fold["recall"])
             recall_scores.append(results_for_fold["recall_scores"])
+
+            # store the true labels and predicted labels for
+            # this fold on the validation set
+            valid_labels = torch.cat([valid_labels, results_for_fold["valid_labels"]])
+            valid_predicted = torch.cat(
+                [valid_predicted, results_for_fold["valid_predicted"]]
+            )
+
+            # store the metrics for this fold
+            valid_accuracy.append(results_for_fold["valid_accuracy"])
+            valid_f1.append(results_for_fold["valid_f1"])
+            valid_f1_scores.append(results_for_fold["valid_f1_scores"])
+            valid_precision.append(results_for_fold["valid_precision"])
+            valid_precision_scores.append(results_for_fold["valid_precision_scores"])
+            valid_recall.append(results_for_fold["valid_recall"])
+            valid_recall_scores.append(results_for_fold["valid_recall_scores"])
 
         if not return_metric_for_each_fold:
             # compute how well the model performed on the test sets together
@@ -342,6 +403,32 @@ def fine_tune_transformer_for_classification(
             # compute macro recall score
             recall = sum(recall_scores) / len(recall_scores)
 
+            # compute how well the model performed on the
+            # validation sets in the folds
+            valid_accuracy = (
+                (valid_predicted == valid_labels).sum() / len(valid_labels)
+            ).item()
+
+            # compute F1
+            valid_f1_scores = metrics.f1_score(
+                valid_labels, valid_predicted, average=None, zero_division=0.0
+            )
+            valid_f1 = sum(valid_f1_scores) / len(valid_f1_scores)
+
+            # compute precision scores
+            valid_precision_scores = metrics.precision_score(
+                valid_labels, valid_predicted, average=None, zero_division=0.0
+            )
+            # compute macro precision score
+            valid_precision = sum(valid_precision_scores) / len(valid_precision_scores)
+
+            # compute recall scores
+            valid_recall_scores = metrics.recall_score(
+                valid_labels, valid_predicted, average=None, zero_division=0.0
+            )
+            # compute macro recall score
+            valid_recall = sum(valid_recall_scores) / len(valid_recall_scores)
+
         return pd.DataFrame(
             {
                 "accuracy": accuracy,
@@ -351,6 +438,13 @@ def fine_tune_transformer_for_classification(
                 "precision_scores": [precision_scores],
                 "recall": recall,
                 "recall_scores": [recall_scores],
+                "valid_accuracy": valid_accuracy,
+                "valid_f1": valid_f1,
+                "valid_f1_scores": [valid_f1_scores],
+                "valid_precision": valid_precision,
+                "valid_precision_scores": [valid_precision_scores],
+                "valid_recall": valid_recall,
+                "valid_recall_scores": [valid_recall_scores],
             }
         )
     else:
@@ -376,6 +470,7 @@ def fine_tune_transformer_for_classification(
             label_to_id=label_to_id,
             id_to_label=id_to_label,
             output_dim=output_dim,
+            learning_rate=learning_rate,
             seed=seed,
             loss=loss,
             gamma=gamma,
@@ -396,6 +491,13 @@ def fine_tune_transformer_for_classification(
                 "precision_scores": [results["precision_scores"]],
                 "recall": results["recall"],
                 "recall_scores": [results["recall_scores"]],
+                "valid_accuracy": results["valid_accuracy"],
+                "valid_f1": results["valid_f1"],
+                "valid_f1_scores": [results["valid_f1_scores"]],
+                "valid_precision": results["valid_precision"],
+                "valid_precision_scores": [results["valid_precision_scores"]],
+                "valid_recall": results["valid_recall"],
+                "valid_recall_scores": [results["valid_recall_scores"]],
             }
         )
 
@@ -409,6 +511,7 @@ def fine_tune_transformer_average_seed(
     label_to_id: dict[str, int],
     id_to_label: dict[int, str],
     output_dim: int,
+    learning_rates: list[float],
     seeds: list[int],
     loss: str,
     gamma: float = 0.0,
@@ -434,6 +537,83 @@ def fine_tune_transformer_average_seed(
     if validation_metric not in ["accuracy", "f1"]:
         raise ValueError("validation_metric must be either 'accuracy' or 'f1'")
 
+    # initialise SaveBestModel class
+    model_output = f"best_bert_model_{_get_timestamp()}.pkl"
+    save_best_model = SaveBestModel(
+        metric=validation_metric, output=model_output, verbose=verbose
+    )
+
+    # find model parameters that has the best validation
+    results_df = pd.DataFrame()
+    model_id = 0
+
+    for lr in tqdm(learning_rates):
+        scores = []
+        for seed in seeds:
+            results = fine_tune_transformer_for_classification(
+                num_epochs=num_epochs,
+                pretrained_model_name=pretrained_model_name,
+                df=df,
+                feature_name=feature_name,
+                label_column=label_column,
+                label_to_id=label_to_id,
+                id_to_label=id_to_label,
+                output_dim=output_dim,
+                learning_rate=lr,
+                seed=seed,
+                loss=loss,
+                gamma=gamma,
+                device=device,
+                batch_size=batch_size,
+                path_indices=path_indices,
+                data_split_seed=data_split_seed,
+                split_ids=split_ids,
+                split_indices=split_indices,
+                k_fold=k_fold,
+                n_splits=n_splits,
+                return_metric_for_each_fold=return_metric_for_each_fold,
+                verbose=verbose,
+            )
+
+            # save metric that we want to validate on
+            # take mean of performance on the folds
+            # if k_fold=False, return performance for seed
+            scores.append(results[f"valid_{validation_metric}"].mean())
+
+            results["learning_rate"] = lr
+            results["seed"] = seed
+            results["loss_function"] = loss
+            results["gamma"] = gamma
+            results["k_fold"] = k_fold
+            results["n_splits"] = n_splits if k_fold else None
+            results["batch_size"] = batch_size
+            results["model_id"] = model_id
+            results_df = pd.concat([results_df, results])
+
+        model_id += 1
+        scores_mean = sum(scores) / len(scores)
+
+        if verbose:
+            print(
+                f"- average{' (kfold)' if k_fold else ''} "
+                f"(validation) metric score: {scores_mean}"
+            )
+            print(f"scores for the different seeds: {scores}")
+
+        # save best model according to averaged metric over the different seeds
+        save_best_model(
+            current_valid_metric=scores_mean,
+            extra_info={
+                "learning_rate": lr,
+            },
+        )
+
+    checkpoint = torch.load(f=model_output)
+    if verbose:
+        print("*" * 50)
+        print("The best model had the following parameters:")
+        print(checkpoint["extra_info"])
+
     test_scores = []
     test_results_df = pd.DataFrame()
     for seed in seeds:
@@ -446,6 +626,7 @@ def fine_tune_transformer_average_seed(
             label_to_id=label_to_id,
             id_to_label=id_to_label,
             output_dim=output_dim,
+            learning_rate=checkpoint["extra_info"]["learning_rate"],
             seed=seed,
             loss=loss,
             gamma=gamma,
@@ -461,10 +642,13 @@ def fine_tune_transformer_average_seed(
             verbose=verbose,
         )
 
+        test_results["learning_rate"] = lr
         test_results["seed"] = seed
-        test_results["loss"] = loss
+        test_results["loss_function"] = loss
         test_results["gamma"] = gamma
         test_results["k_fold"] = k_fold
+        test_results["n_splits"] = n_splits if k_fold else None
+        test_results["batch_size"] = batch_size
         test_results_df = pd.concat([test_results_df, test_results])
 
         # save metric that we want to validate on

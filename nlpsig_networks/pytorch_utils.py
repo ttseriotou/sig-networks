@@ -506,7 +506,7 @@ def training_pytorch(
                 # compute loss, accuracy and F1 on training set as well
                 # this is to determine how well we're doing on the training set
                 # allows us to choose between models that have the same validation
-                validation_results = validation_pytorch(
+                train_results = validation_pytorch(
                     model=model,
                     valid_loader=train_loader,
                     criterion=criterion,
@@ -515,7 +515,7 @@ def training_pytorch(
                     verbose=False,
                 )
                 # save metric that we want to validate on
-                metric_train = validation_results[validation_metric]
+                metric_train = train_results[validation_metric]
 
                 # save best model according to metric
                 save_best_model(
