@@ -1,9 +1,9 @@
 import numpy as np
-import pickle
 import os
 import torch
 from nlpsig_networks.scripts.seqsignet_functions import seqsignet_hyperparameter_search
-from ..load_anno_mi import anno_mi, y_data_client, output_dim_client, client_index, client_transcript_id
+from load_sbert_embeddings import sbert_embeddings
+from load_rumours import df_rumours, y_data, output_dim, split_ids
 
 seed = 2023
 
@@ -12,13 +12,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Device: ", device)
 
 # set output directory
-output_dir = "client_talk_type_output"
+output_dir = "rumours_output"
 if not os.path.isdir(output_dir):
     os.makedirs(output_dir)
-
-# load sbert embeddings
-with open("../anno_mi_sbert.pkl", "rb") as f:
-    sbert_embeddings = pickle.load(f)
 
 # set features
 features = ["time_encoding", "timeline_index"]
@@ -31,7 +27,7 @@ num_epochs = 100
 dimensions = [15]
 swnu_hidden_dim_sizes_and_sig_depths = [([12], 3), ([10], 3)]
 lstm_hidden_dim_sizes = [300, 400]
-ffn_hidden_dim_sizes = [[32,32], [128,128], [512,512]]
+ffn_hidden_dim_sizes = [[32, 32], [128, 128], [512, 512]]
 dropout_rates = [0.1]
 learning_rates = [5e-4, 3e-4, 1e-4]
 seeds = [1, 12, 123]
@@ -43,12 +39,12 @@ patience = 3
 # set kwargs
 kwargs = {
     "num_epochs": num_epochs,
-    "df": anno_mi,
-    "id_column": "transcript_id",
-    "label_column": "client_talk_type",
+    "df": df_rumours,
+    "id_column": "timeline_id",
+    "label_column": "label",
     "embeddings": sbert_embeddings,
-    "y_data": y_data_client,
-    "output_dim": output_dim_client,
+    "y_data": y_data,
+    "output_dim": output_dim,
     "dimensions": dimensions,
     "log_signature": True,
     "pooling": "signature",
@@ -66,8 +62,7 @@ kwargs = {
     "standardise_method": standardise_method,
     "include_features_in_path": include_features_in_path,
     "include_features_in_input": include_features_in_input,
-    "path_indices": client_index,
-    "split_ids": client_transcript_id,
+    "split_ids": split_ids,
     "k_fold": True,
     "patience": patience,
     "validation_metric": validation_metric,
@@ -75,7 +70,7 @@ kwargs = {
 }
 
 # run hyperparameter search
-lengths = [(3, 5, 3), (3, 5, 6), (3, 5, 11), (3, 5, 26), (3, 5, 36)]
+lengths = [(3, 5, 3), (3, 5, 6), (3, 5, 11), (3, 5, 26)]
 
 for shift, window_size, n in lengths:
     print(f"shift: {shift}, window_size: {window_size}, n: {n}")
@@ -96,6 +91,15 @@ for shift, window_size, n in lengths:
     print(f"F1: {best_seqsignet_network_umap_kfold['f1'].mean()}")
     print(f"Precision: {best_seqsignet_network_umap_kfold['precision'].mean()}")
     print(f"Recall: {best_seqsignet_network_umap_kfold['recall'].mean()}")
-    print(f"F1 scores: {np.stack(best_seqsignet_network_umap_kfold['f1_scores']).mean(axis=0)}")
-    print(f"Precision scores: {np.stack(best_seqsignet_network_umap_kfold['precision_scores']).mean(axis=0)}")
-    print(f"Recall scores: {np.stack(best_seqsignet_network_umap_kfold['recall_scores']).mean(axis=0)}")
+    print(
+        "F1 scores: "
+        f"{np.stack(best_seqsignet_network_umap_kfold['f1_scores']).mean(axis=0)}"
+    )
+    print(
+        "Precision scores: "
+        f"{np.stack(best_seqsignet_network_umap_kfold['precision_scores']).mean(axis=0)}"
+    )
+    print(
+        "Recall scores: "
+        f"{np.stack(best_seqsignet_network_umap_kfold['recall_scores']).mean(axis=0)}"
+    )
