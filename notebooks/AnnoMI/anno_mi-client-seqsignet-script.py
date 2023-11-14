@@ -2,10 +2,8 @@ import numpy as np
 import pickle
 import os
 import torch
-from nlpsig_networks.scripts.swnu_network_functions import (
-    swnu_network_hyperparameter_search,
-)
-from ..load_anno_mi import (
+from nlpsig_networks.scripts.seqsignet_functions import seqsignet_hyperparameter_search
+from load_anno_mi import (
     anno_mi,
     y_data_client,
     output_dim_client,
@@ -25,19 +23,20 @@ if not os.path.isdir(output_dir):
     os.makedirs(output_dir)
 
 # load sbert embeddings
-with open("../anno_mi_sbert.pkl", "rb") as f:
+with open("anno_mi_sbert.pkl", "rb") as f:
     sbert_embeddings = pickle.load(f)
 
 # set features
-features = ["time_encoding", "timeline_index"]
-standardise_method = ["z_score", None]
+features = ["time_encoding_minute", "timeline_index"]
+standardise_method = [None, None]
 include_features_in_path = True
-include_features_in_input = True
+include_features_in_input = False
 
 # set hyperparameters
 num_epochs = 100
 dimensions = [15]
 swnu_hidden_dim_sizes_and_sig_depths = [([12], 3), ([10], 3)]
+lstm_hidden_dim_sizes = [300, 400]
 ffn_hidden_dim_sizes = [[32, 32], [128, 128], [512, 512]]
 dropout_rates = [0.1]
 learning_rates = [5e-4, 3e-4, 1e-4]
@@ -60,6 +59,7 @@ kwargs = {
     "log_signature": True,
     "pooling": "signature",
     "swnu_hidden_dim_sizes_and_sig_depths": swnu_hidden_dim_sizes_and_sig_depths,
+    "lstm_hidden_dim_sizes": lstm_hidden_dim_sizes,
     "ffn_hidden_dim_sizes": ffn_hidden_dim_sizes,
     "dropout_rates": dropout_rates,
     "learning_rates": learning_rates,
@@ -81,37 +81,36 @@ kwargs = {
 }
 
 # run hyperparameter search
-lengths = [(3, 5, 3), (3, 5, 6), (3, 5, 11), (3, 5, 26), (3, 5, 36)]
+lengths = [(3, 5, 3), (3, 5, 6), (3, 5, 11), (3, 5, 26)]
 
-# run hyperparameter search
-lengths = [5, 11, 20, 35, 80, 110]
-
-for size in lengths:
-    print(f"history_length: {size}")
+for shift, window_size, n in lengths:
+    print(f"shift: {shift}, window_size: {window_size}, n: {n}")
     (
-        swnu_network_umap_kfold,
-        best_swnu_network_umap_kfold,
+        seqsignet_network_umap_kfold,
+        best_seqsignet_network_umap_kfold,
         _,
         __,
-    ) = swnu_network_hyperparameter_search(
-        history_lengths=[size],
+    ) = seqsignet_hyperparameter_search(
+        shift=shift,
+        window_size=window_size,
+        n=n,
         dim_reduce_methods=["umap"],
-        results_output=f"{output_dir}/swnu_network_umap_focal_{gamma}_{size}_kfold.csv",
+        results_output=f"{output_dir}/seqsignet_umap_focal_{gamma}_{shift}_{window_size}_{n}_kfold.csv",
         **kwargs,
     )
 
-    print(f"F1: {best_swnu_network_umap_kfold['f1'].mean()}")
-    print(f"Precision: {best_swnu_network_umap_kfold['precision'].mean()}")
-    print(f"Recall: {best_swnu_network_umap_kfold['recall'].mean()}")
+    print(f"F1: {best_seqsignet_network_umap_kfold['f1'].mean()}")
+    print(f"Precision: {best_seqsignet_network_umap_kfold['precision'].mean()}")
+    print(f"Recall: {best_seqsignet_network_umap_kfold['recall'].mean()}")
     print(
         "F1 scores: "
-        f"{np.stack(best_swnu_network_umap_kfold['f1_scores']).mean(axis=0)}"
+        f"{np.stack(best_seqsignet_network_umap_kfold['f1_scores']).mean(axis=0)}"
     )
     print(
         "Precision scores: "
-        f"{np.stack(best_swnu_network_umap_kfold['precision_scores']).mean(axis=0)}"
+        f"{np.stack(best_seqsignet_network_umap_kfold['precision_scores']).mean(axis=0)}"
     )
     print(
         "Recall scores: "
-        f"{np.stack(best_swnu_network_umap_kfold['recall_scores']).mean(axis=0)}"
+        f"{np.stack(best_seqsignet_network_umap_kfold['recall_scores']).mean(axis=0)}"
     )
