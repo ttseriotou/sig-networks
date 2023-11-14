@@ -20,9 +20,26 @@ from nlpsig_networks.focal_loss import ClassBalanced_FocalLoss, FocalLoss
 
 
 def _get_timestamp(add_runid: bool = True) -> str:
+    """
+    Function to get the current timestamp in the format
+    YYYY-MM-DD-HH-mm-ss-uuuuuu.
+
+    Parameters
+    ----------
+    add_runid : bool, optional
+        Whether or not to add a random uuid4 to the end
+        of the timestamp, by default True
+
+    Returns
+    -------
+    str
+        Timestamp in the format YYYY-MM-DD-HH-mm-ss-uuuuuu
+        with a random uuid4 at the end if add_runid=True.
+    """
     timestamp = str(datetime.datetime.now())
     if add_runid:
         timestamp += f"_{str(uuid4())}"
+
     return timestamp.replace(" ", "-").replace(":", "-").replace(".", "-")
 
 
