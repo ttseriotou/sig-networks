@@ -44,8 +44,7 @@ class SeqSigNetAttentionBiLSTM(nn.Module):
         Parameters
         ----------
         input_channels : int
-            Dimension of the (dimensonally reduced) history embeddings
-            that will be passed in.
+            Dimension of the embeddings in the path that will be passed in.
         output_channels : int
             Requested dimension of the embeddings after convolution layer.
         num_features : int
@@ -62,7 +61,7 @@ class SeqSigNetAttentionBiLSTM(nn.Module):
             The number of layers in the SWMHAU.
         hidden_dim_lstm : int
             Dimensions of the hidden layers in the final BiLSTM applied to the output
-            of the SWNU units.
+            of the SWMHA units.
         hidden_dim_ffn : list[int] | int
             Dimension of the hidden layers in the FFN.
         output_dim : int
@@ -99,7 +98,6 @@ class SeqSigNetAttentionBiLSTM(nn.Module):
             - scaled_concatenation: concatenation of single value scaled path
               signature and embedding vector
         """
-
         super(SeqSigNetAttentionBiLSTM, self).__init__()
 
         # SWMHAU applied to the input (the unit includes the convolution layer)
@@ -117,7 +115,7 @@ class SeqSigNetAttentionBiLSTM(nn.Module):
             hidden_dim_aug=hidden_dim_aug,
         )
 
-        # BiLSTM that processes the outputs from SWNUs for each window
+        # BiLSTM that processes the outputs from SWMHAUs for each window
         self.hidden_dim_lstm = hidden_dim_lstm
         self.lstm_sig = nn.LSTM(
             input_size=self.swmhau.swmha.signature_terms,

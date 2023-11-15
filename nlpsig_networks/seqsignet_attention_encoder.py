@@ -46,8 +46,7 @@ class SeqSigNetAttentionEncoder(nn.Module):
         Parameters
         ----------
         input_channels : int
-            Dimension of the (dimensonally reduced) history embeddings
-            that will be passed in.
+            Dimension of the embeddings in the path that will be passed in.
         output_channels : int
             Requested dimension of the embeddings after convolution layer.
         num_features : int

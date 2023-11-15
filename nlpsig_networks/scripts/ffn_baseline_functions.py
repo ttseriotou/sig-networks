@@ -73,12 +73,14 @@ def implement_ffn(
     gamma : float, optional
         Gamma to use for focal loss, by default 0.0.
         Ignored if loss="cross_entropy"
+    device : str | None, optional
+        Device to use for training and evaluation, by default None
     batch_size: int, optional
         Batch size, by default 64
     data_split_seed : int, optional
         The seed which is used when splitting, by default 0
     split_ids : torch.Tensor | None, optional
-        Groups to split by, default None.
+        Groups to split by, default None
     split_indices : tuple[Iterable[int] | None] | None, optional
         Train, validation, test indices to use. If passed, will split the data
         according to these indices rather than splitting it within the method
@@ -86,7 +88,7 @@ def implement_ffn(
         First item in the tuple should be the indices for the training set,
         second item should be the indices for the validaton set (this could
         be None if no validation set is required), and third item should be
-        indices for the test set.
+        indices for the test set
     k_fold : bool, optional
         Whether or not to use k-fold validation, by default False
     n_splits : int, optional
@@ -95,9 +97,11 @@ def implement_ffn(
     patience : int, optional
         Patience of training, by default 10.
     verbose_training : bool, optional
-        Whether or not to print out training progress, by default True
+        Whether or not to print out training progress, by default False
     verbose_results : bool, optional
-        Whether or not to print out results on validation and test, by default True
+        Whether or not to print out results on validation and test, by default False
+    verbose_model : bool, optional
+        Whether or not to print out the model, by default False
 
     Returns
     -------
@@ -175,9 +179,13 @@ def ffn_hyperparameter_search(
     verbose: bool = True,
 ) -> tuple[pd.DataFrame, pd.DataFrame, float, dict]:
     """
-    Performs hyperparameter search for different hidden dimensions,
-    dropout rates, learning rates by training and evaluating
-    a FFN on various seeds and averaging performance over the seeds.
+    Performs hyperparameter search for the baseline FFN model
+    for different hidden dimensions, dropout rates, learning rates
+    by training and evaluating a FFN on various seeds and
+    averaging performance over the seeds.
+
+    We select the best model based on the average performance on
+    the validation set. We then evaluate the best model on the test set.
 
     If k_fold=True, will perform k-fold validation on each seed and
     average over the average performance over the folds, otherwise
@@ -187,50 +195,69 @@ def ffn_hyperparameter_search(
     Parameters
     ----------
     num_epochs : int
-        _description_
+        Number of epochs
     x_data : torch.tensor | np.array
-        _description_
+        Input variables
     y_data : torch.tensor | np.array
-        _description_
+        Target classification labels
     output_dim : int
         Number of unique classification labels
     hidden_dim_sizes : list[list[int]] | list[int]
-        _description_
+        Hidden dimensions in FFN to try out. Each element in the list
+        should be a list of ints if multiple hidden layers are required,
+        or an int if a single hidden layer is required
     dropout_rates : list[float]
-        _description_
+        Dropout rates to try out. Each element in the list
+        should be a float
     learning_rates : list[float]
-        _description_
+        Learning rates to try out. Each element in the list
+        should be a float
     seeds : list[int]
-        _description_
+        Seeds to use throughout to average over the performance
+        (besides for splitting the data - see data_split_seed)
     loss : str
-        _description_
+        Loss to use, options are "focal" for focal loss, and
+        "cross_entropy" for cross-entropy loss.
     gamma : float, optional
-        _description_, by default 0.0
+        Value of gamma in focal loss, by default 0.0.
+        Ignored if loss="cross_entropy".
     batch_size: int, optional
-        _description_, by default 64
+        Batch size to use in training, by default 64.
     data_split_seed : int, optional
-        _description_, by default 0
+        The seed which is used when splitting, by default 0
     split_ids : torch.Tensor | None, optional
-        _description_, by default None
+        Groups to split by, default None.
     split_indices : tuple[Iterable[int] | None] | None, optional
-        _description_, by default None
+        Train, validation, test indices to use. If passed, will split the data
+        according to these indices rather than splitting it within the method
+        using the train_size and valid_size provided.
+        First item in the tuple should be the indices for the training set,
+        second item should be the indices for the validaton set (this could
+        be None if no validation set is required), and third item should be
+        indices for the test set.
     k_fold : bool, optional
-        _description_, by default False
+        Whether or not to use k-fold validation, by default False
     n_splits : int, optional
-        _description_, by default 5
+        Number of splits to use in k-fold validation, by default 5.
+        Ignored if k_fold=False
     patience : int, optional
-        _description_, by default 10
+        Patience of training, by default 10.
     validation_metric : str, optional
-        _description_, by default "f1"
+        Metric to use to use for determining the best model, by default "f1"
     results_output : str | None, optional
-        _description_, by default None
+        Path for where to save the results dataframe, by default None
     verbose : bool, optional
-        _description_, by default True
+        Whether or not to print out progress, by default True
 
     Returns
     -------
     tuple[pd.DataFrame, pd.DataFrame, float, dict]
-        _description_
+        A tuple containing the full results dataframe which includes the
+        performance of each of the models fitted during the hyperparameter
+        search for each of the seeds, the results dataframe for the best
+        performing model (based on the average validation metric performance),
+        the average validation metric performance of the best model, and
+        the hyperparameters which gave the best model.
     """
     if validation_metric not in ["loss", "accuracy", "f1"]:
         raise ValueError("validation_metric must be either 'loss', 'accuracy' or 'f1'")
@@ -304,7 +331,6 @@ def ffn_hyperparameter_search(
                     # don't continue printing out the model
                     verbose_model = False
 
-                model_id += 1
                 scores_mean = sum(scores) / len(scores)
 
                 if verbose:
@@ -313,7 +339,10 @@ def ffn_hyperparameter_search(
                         f"(validation) metric score: {scores_mean}"
                     )
                     print(f"scores for the different seeds: {scores}")
+
                 # save best model according to averaged metric over the different seeds
+                # if the score is better than the previous best,
+                # we save the parameters to model_output
                 save_best_model(
                     current_valid_metric=scores_mean,
                     extra_info={
@@ -413,6 +442,35 @@ def obtain_mean_history(
     path_indices: list | np.array | None = None,
     concatenate_current: bool = True,
 ) -> torch.tensor:
+    """
+    Function the obtains the mean history of the embeddings.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataframe containing the data
+    id_column : str
+        Name of the column which identifies each of the text, e.g.
+        - "text_id" (if each item in `df` is a word or sentence from a particular text),
+        - "user_id" (if each item in `df` is a post from a particular user),
+        - "timeline_id" (if each item in `df` is a post from a particular time)
+    label_column : str
+        Name of the column which are corresponds to the labels of the data
+    embeddings : np.array
+        Corresponding embeddings for each of the items in `df`
+    path_indices : list | np.array | None, optional
+        The indices in the batches that we want to train and evaluate on,
+        by default None. If supplied, we slice the path in this way
+        before computing the mean history
+    concatenate_current : bool, optional
+        Whether or not to concatenate the mean history with the current
+        embedding, by default True
+
+    Returns
+    -------
+    torch.tensor
+        Mean of the history of the embeddings of the items in `df`
+    """
     paths = nlpsig.PrepareData(
         original_df=df,
         id_column=id_column,
@@ -469,6 +527,46 @@ def obtain_signatures_history(
     path_indices: list | np.array | None = None,
     concatenate_current: bool = True,
 ) -> torch.tensor:
+    """
+    Function for obtaining the signature of the history of the embeddings.
+
+    Parameters
+    ----------
+    method : str
+        Dimension reduction method to use. See nlpsig.DimReduce for options
+    dimension : int
+        Dimension to reduce the embeddings to
+    sig_depth : int
+        Signature depth to use
+    log_signature : bool
+        Whether or not to use the log signature. If True, will
+        compute the log signature of the history path
+    df : pd.DataFrame
+        Dataframe containing the data
+    id_column : str
+        Name of the column which identifies each of the text, e.g.
+        - "text_id" (if each item in `df` is a word or sentence from a particular text),
+        - "user_id" (if each item in `df` is a post from a particular user),
+        - "timeline_id" (if each item in `df` is a post from a particular time)
+    label_column : str
+        Name of the column which are corresponds to the labels of the data
+    embeddings : np.array
+        Corresponding embeddings for each of the items in `df`
+    seed : int, optional
+        Seed to use for dimension reduction, by default 42
+    path_indices : list | np.array | None, optional
+        The indices in the batches that we want to train and evaluate on,
+        by default None. If supplied, we slice the path in this way
+        before computing the signatures
+    concatenate_current : bool, optional
+        Whether or not to concatenate the signatures with the current
+        embedding, by default True
+
+    Returns
+    -------
+    torch.tensor
+        Signatures of the history of the embeddings of the items in `df`
+    """
     # use nlpsig to construct the path as a numpy array
     # first define how we construct the path
     path_specifics = {
@@ -526,7 +624,7 @@ def histories_baseline_hyperparameter_search(
     id_column: str,
     label_column: str,
     embeddings: np.array,
-    y_data: np.array,
+    y_data: torch.tensor | np.array,
     output_dim: int,
     hidden_dim_sizes: list[list[int]] | list[int],
     dropout_rates: list[float],
@@ -551,6 +649,121 @@ def histories_baseline_hyperparameter_search(
     results_output: str | None = None,
     verbose: bool = True,
 ) -> tuple[pd.DataFrame, pd.DataFrame, float, dict]:
+    """
+    Performs hyperparameter search for the baseline FFN model which
+    concatenates the mean history (of the embeeddings) or the signature of the
+    history to the current embedding, for different hidden
+    for different hidden dimensions, dropout rates, learning rates
+    by training and evaluating a FFN on various seeds and
+    averaging performance over the seeds. If use_signatures=True,
+    we also have a hyperparameter search over the dimension reduction
+    methods and the dimensions and signature depths to use.
+
+    We select the best model based on the average performance on
+    the validation set. We then evaluate the best model on the test set.
+
+    If k_fold=True, will perform k-fold validation on each seed and
+    average over the average performance over the folds, otherwise
+    will average over the performance of the FFNs trained using each
+    seed.
+
+    Parameters
+    ----------
+    num_epochs : int
+        Number of epochs
+    df : pd.DataFrame
+        Dataframe containing the data
+    id_column : str
+        Name of the column which identifies each of the text, e.g.
+        - "text_id" (if each item in `df` is a word or sentence from a particular text),
+        - "user_id" (if each item in `df` is a post from a particular user),
+        - "timeline_id" (if each item in `df` is a post from a particular time)
+    label_column : str
+        Name of the column which are corresponds to the labels of the data
+    embeddings : np.array
+        Corresponding embeddings for each of the items in `df`
+    y_data : torch.tensor | np.array
+        Target classification labels
+    output_dim : int
+        Number of unique classification labels
+    hidden_dim_sizes : list[list[int]] | list[int]
+        Hidden dimensions in FFN to try out. Each element in the list
+        should be a list of ints if multiple hidden layers are required,
+        or an int if a single hidden layer is required
+    dropout_rates : list[float]
+        Dropout rates to try out. Each element in the list
+        should be a float
+    learning_rates : list[float]
+        Learning rates to try out. Each element in the list
+        should be a float
+    use_signatures : bool
+        Whether or not to use signatures. If False, will use the mean history
+        of the embeddings.
+    seeds : list[int]
+        Seeds to use throughout to average over the performance
+        (besides for splitting the data - see data_split_seed)
+    loss : str
+        Loss to use, options are "focal" for focal loss, and "cross_entropy" for
+        cross-entropy loss
+    gamma : float, optional
+        Gamma to use for focal loss, by default 0.0.
+        Ignored if loss="cross_entropy"
+    device : str | None, optional
+        Device to use for training and evaluation, by default None
+    batch_size: int, optional
+        Batch size, by default 64
+    log_signature : bool, optional
+        Whether or not to use the log signatures rather than standard signatures,
+        by default False
+    dim_reduce_methods : list[str] | None, optional
+        Methods for dimension reduction to try out, by default None.
+        Ignored if use_signatures=False. If use_signatures=True, each element
+        in the list should be a string. See nlpsig.DimReduce for options.
+    dimension_and_sig_depths : list[tuple[int, int]] | None, optional
+        The combinations of dimensions and signature depths to use, by default None.
+        Ignored if use_signatures=False. If use_signatures=True, each element
+        in the list should be a tuple of ints, where the first element is the
+        dimension and the second element is the corresponding signature depth.
+    path_indices : list | np.array | None, optional
+        The indices in the batches that we want to train and evaluate on,
+        by default None. If supplied, we slice the resulting input data and target
+        classification labels in this way
+    data_split_seed : int, optional
+        The seed which is used when splitting, by default 0
+    split_ids : torch.Tensor | None, optional
+        Groups to split by, default None
+    split_indices : tuple[Iterable[int] | None] | None, optional
+        Train, validation, test indices to use. If passed, will split the data
+        according to these indices rather than splitting it within the method
+        using the train_size and valid_size provided.
+        First item in the tuple should be the indices for the training set,
+        second item should be the indices for the validaton set (this could
+        be None if no validation set is required), and third item should be
+        indices for the test set
+    k_fold : bool, optional
+        Whether or not to use k-fold validation, by default False
+    n_splits : int, optional
+        Number of splits to use in k-fold validation, by default 5.
+        Ignored if k_fold=False
+    patience : int, optional
+        Patience of training, by default 10.
+    validation_metric : str, optional
+        Metric to use to use for determining the best model, by default "f1"
+    results_output : str | None, optional
+        Path for where to save the results dataframe, by default None
+    verbose : bool, optional
+        Whether or not to print out progress, by default True
+
+    Returns
+    -------
+    tuple[pd.DataFrame, pd.DataFrame, float, dict]
+        A tuple containing the full results dataframe which includes the
+        performance of each of the models fitted during the hyperparameter
+        search for each of the seeds, the results dataframe for the best
+        performing model (based on the average validation metric performance),
+        the average validation metric performance of the best model, and
+        the hyperparameters which gave the best model.
+    """
     if use_signatures:
         if dim_reduce_methods is None:
             msg = (
@@ -565,13 +778,14 @@ def histories_baseline_hyperparameter_search(
             )
             raise ValueError(msg)
 
-    # initialise SaveBestModel class
+    # initialise SaveBestModel class for saving the best model
     model_output = f"best_ffn_history_model_{_get_timestamp()}.pkl"
     best_model = SaveBestModel(
         metric=validation_metric, output=model_output, verbose=verbose
     )
 
     results_df = pd.DataFrame()
+    # start model_id counter
     model_id = 0
     if use_signatures:
         for dimension, sig_depth in tqdm(dimension_and_sig_depths):
@@ -634,6 +848,9 @@ def histories_baseline_hyperparameter_search(
                 ]
                 results_df = pd.concat([results_df, results])
 
+                # save best model according to averaged metric over the different seeds
+                # if the score is better than the previous best,
+                # we save the parameters to model_output
                 best_model(
                     current_valid_metric=best_valid_metric,
                     extra_info={
@@ -646,6 +863,7 @@ def histories_baseline_hyperparameter_search(
                     },
                 )
 
+                # update model_id counter
                 model_id += 1
     else:
         # obtain the ffn input by averaging over history
@@ -688,13 +906,15 @@ def histories_baseline_hyperparameter_search(
         results["model_id"] = [float(f"{model_id}.{id}") for id in results["model_id"]]
         results_df = pd.concat([results_df, results])
 
+        # save best model according to averaged metric over the different seeds
+        # if the score is better than the previous best,
+        # we save the parameters to model_output
         best_model(
             current_valid_metric=best_valid_metric,
             extra_info={"input_dim": x_data.shape[1], **FFN_info},
         )
 
-        model_id += 1
-
+    # load the parameters that gave the best model according to the validation metric
     checkpoint = torch.load(f=model_output)
     if verbose:
         print("*" * 50)
@@ -726,6 +946,8 @@ def histories_baseline_hyperparameter_search(
             concatenate_current=True,
         )
 
+    # implement model again and obtain the results dataframe
+    # and evaluate on the test set
     test_scores = []
     test_results_df = pd.DataFrame()
     for seed in seeds:

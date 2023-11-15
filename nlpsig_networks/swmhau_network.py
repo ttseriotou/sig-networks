@@ -39,7 +39,7 @@ class SWMHAUNetwork(nn.Module):
         Parameters
         ----------
         input_channels : int
-            Dimension of the embeddings that will be passed in.
+            Dimension of the embeddings in the path that will be passed in.
         output_channels : int | None, optional
             Requested dimension of the embeddings after convolution layer.
         num_features : int

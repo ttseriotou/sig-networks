@@ -32,6 +32,29 @@ def testing_transformer(
     """
     Function to evaluate a transformer model by computing the accuracy
     and F1 score.
+
+    Parameters
+    ----------
+    trainer : Trainer
+        HuggingFace Trainer object which has been trained on a dataset
+    test_dataset : Dataset
+        HuggingFace Dataset object which contains the test data
+    verbose : bool, optional
+        Whether or not to print out progress, by default True
+
+    Returns
+    -------
+    dict[str, float | list[float]]
+        Dictionary containing the following keys:
+        - "predicted": predicted labels as a torch tensor
+        - "labels": true labels as a torch tensor
+        - "accuracy": accuracy of the model
+        - "f1": F1 score of the model
+        - "f1_scores": F1 score for each class as a list
+        - "precision": precision of the model
+        - "precision_scores": precision for each class as a list
+        - "recall": recall of the model
+        - "recall_scores": recall for each class as a list
     """
     predictions = trainer.predict(test_dataset)
     predicted = np.argmax(predictions.predictions, axis=-1)
@@ -107,6 +130,74 @@ def _fine_tune_transformer_for_data_split(
     """
     Function to fine-tune and evalaute a model for a given
     data_split (via split_indices)
+
+    Parameters
+    ----------
+    num_epochs : int
+        Number of epochs
+    pretrained_model_name : str
+        Model name from HuggingFace Transformers model hub
+    df : pd.DataFrame
+        Dataframe containing the data
+    feature_name : str
+        Column name which has the text in that we want to tokenize
+    label_column : str
+        Name of the column which are corresponds to the labels of the data
+    label_to_id : dict[str, int]
+        Dictionary which maps the labels (as a string) to IDs (as an int)
+    id_to_label : dict[int, str]
+        Dictionary which maps the IDs (as an int) to labels (as a string)
+    output_dim : int
+        Number of unique classification labels
+    learning_rate : float
+        Learning rate to use for training
+    seed : int
+        Seed to use for reproducibility
+    loss : str
+        Loss to use, options are "focal" for focal loss, and "cross_entropy" for
+        cross-entropy loss
+    gamma : float, optional
+        Gamma to use for focal loss, by default 0.0.
+        Ignored if loss="cross_entropy"
+    device : str | None, optional
+        Device to use for training and evaluation, by default None
+    batch_size: int, optional
+        Batch size, by default 64
+    path_indices : list | np.array | None, optional
+        The indices in the batches that we want to train and evaluate on,
+        by default None. If supplied, we slice the resulting input data and target
+        classification labels in this way
+    split_indices : tuple[Iterable[int] | None] | None, optional
+        Train, validation, test indices to use. If passed, will split the data
+        according to these indices rather than splitting it within the method
+        using the train_size and valid_size provided.
+        First item in the tuple should be the indices for the training set,
+        second item should be the indices for the validaton set (this could
+        be None if no validation set is required), and third item should be
+        indices for the test set
+    save_model : bool, optional
+        Whether or not to save the model to some output directory, by default False
+    output_dir : str | None, optional
+        Output directory to save model to, by default None
+    verbose : bool, optional
+        Whether or not to print out progress, by default False
+
+    Returns
+    -------
+    dict[str, float | list[float]]
+        Dictionary containing the following keys:
+        - "predicted": predicted labels as a torch tensor
+        - "labels": true labels as a torch tensor
+        - "accuracy": accuracy of the model
+        - "f1": F1 score of the model
+        - "f1_scores": F1 score for each class as a list
+        - "precision": precision of the model
+        - "precision_scores": precision for each class as a list
+        - "recall": recall of the model
+        - "recall_scores": recall for each class as a list
+
+        As well as the above, it also contains the same metrics
+        evaluated on the validation set.
     """
     # set seed
     set_seed(seed)
@@ -274,10 +365,81 @@ def fine_tune_transformer_for_classification(
     n_splits: int = 5,
     return_metric_for_each_fold: bool = False,
     verbose: bool = False,
-):
+) -> pd.DataFrame:
     """
     Function to fine-tune and evaluate a model by either using k_fold
     evaluation or a standard train/valid/test split.
+
+    Parameters
+    ----------
+    num_epochs : int
+        Number of epochs
+    pretrained_model_name : str
+        Model name from HuggingFace Transformers model hub
+    df : pd.DataFrame
+        Dataframe containing the data
+    feature_name : str
+        Column name which has the text in that we want to tokenize
+    label_column : str
+        Name of the column which are corresponds to the labels of the data
+    label_to_id : dict[str, int]
+        Dictionary which maps the labels (as a string) to IDs (as an int)
+    id_to_label : dict[int, str]
+        Dictionary which maps the IDs (as an int) to labels (as a string)
+    output_dim : int
+        Number of unique classification labels
+    learning_rate : float
+        Learning rate to use for training
+    seed : int
+        Seed to use for reproducibility
+    loss : str
+        Loss to use, options are "focal" for focal loss, and "cross_entropy" for
+        cross-entropy loss
+    gamma : float, optional
+        Gamma to use for focal loss, by default 0.0.
+        Ignored if loss="cross_entropy"
+    device : str | None, optional
+        Device to use for training and evaluation, by default None
+    batch_size: int, optional
+        Batch size, by default 64
+    path_indices : list | np.array | None, optional
+        The indices in the batches that we want to train and evaluate on,
+        by default None. If supplied, we slice the resulting input data and target
+        classification labels in this way
+    data_split_seed : int, optional
+        The seed which is used when splitting, by default 0
+    split_ids : torch.Tensor | None, optional
+        Groups to split by, default None
+    split_indices : tuple[Iterable[int] | None] | None, optional
+        Train, validation, test indices to use. If passed, will split the data
+        according to these indices rather than splitting it within the method
+        using the train_size and valid_size provided.
+        First item in the tuple should be the indices for the training set,
+        second item should be the indices for the validaton set (this could
+        be None if no validation set is required), and third item should be
+        indices for the test set
+    k_fold : bool, optional
+        Whether or not to use k-fold validation, by default False
+    n_splits : int, optional
+        Number of splits to use in k-fold validation, by default 5.
+        Ignored if k_fold=False
+    return_metric_for_each_fold : bool, optional
+        Whether or not to return the metrics for each fold individually,
+        i.e. every row in the returned dataframe is the performance
+        of the fitted model for each fold. If False, it will
+        keep track of the predicted and true labels in the folds
+        and return the overall metric for the dataset.
+        If True, it will simply compute the metrics for each fold
+        indvidually. One can then obtain a single metric by
+        averaging over the performance over the different folds.
+        By default False. Ignored if k_fold=False.
+    verbose : bool, optional
+        Whether or not to print out progress, by default False
+
+    Returns
+    -------
+    pd.DataFrame
+        Performance metrics for the model on the test set and validation set
     """
     # set seed
     set_seed(seed)
@@ -529,17 +691,101 @@ def fine_tune_transformer_average_seed(
     return_metric_for_each_fold: bool = False,
     results_output: str | None = None,
     verbose: bool = False,
-):
+) -> tuple[pd.DataFrame, pd.DataFrame, float, dict]:
     """
     Function to fine-tune and evaluate a model (using k-fold or standard dataset split)
-    for various seeds and average over performance
+    for various seeds and average over performance.
+
+    verbose : bool, optional
+        Whether or not to print out progress, by default False
+    Parameters
+    ----------
+    num_epochs : int
+        Number of epochs
+    pretrained_model_name : str
+        Model name from HuggingFace Transformers model hub
+    df : pd.DataFrame
+        Dataframe containing the data
+    feature_name : str
+        Column name which has the text in that we want to tokenize
+    label_column : str
+        Name of the column which are corresponds to the labels of the data
+    label_to_id : dict[str, int]
+        Dictionary which maps the labels (as a string) to IDs (as an int)
+    id_to_label : dict[int, str]
+        Dictionary which maps the IDs (as an int) to labels (as a string)
+    output_dim : int
+        Number of unique classification labels
+    learning_rates : list[float]
+        Learning rates to try out. Each element in the list
+        should be a float
+    seeds : list[int]
+        Seeds to use throughout to average over the performance
+        (besides for splitting the data - see data_split_seed)
+    loss : str
+        Loss to use, options are "focal" for focal loss, and "cross_entropy" for
+        cross-entropy loss
+    gamma : float, optional
+        Gamma to use for focal loss, by default 0.0.
+        Ignored if loss="cross_entropy"
+    device : str | None, optional
+        Device to use for training and evaluation, by default None
+    batch_size: int, optional
+        Batch size, by default 64
+    path_indices : list | np.array | None, optional
+        The indices in the batches that we want to train and evaluate on,
+        by default None. If supplied, we slice the resulting input data and target
+        classification labels in this way
+    data_split_seed : int, optional
+        The seed which is used when splitting, by default 0
+    split_ids : torch.Tensor | None, optional
+        Groups to split by, default None
+    split_indices : tuple[Iterable[int] | None] | None, optional
+        Train, validation, test indices to use. If passed, will split the data
+        according to these indices rather than splitting it within the method
+        using the train_size and valid_size provided.
+        First item in the tuple should be the indices for the training set,
+        second item should be the indices for the validaton set (this could
+        be None if no validation set is required), and third item should be
+        indices for the test set
+    k_fold : bool, optional
+        Whether or not to use k-fold validation, by default False
+    n_splits : int, optional
+        Number of splits to use in k-fold validation, by default 5.
+        Ignored if k_fold=False
+    validation_metric : str, optional
+        Metric to use to use for determining the best model, by default "f1"
+    return_metric_for_each_fold : bool, optional
+        Whether or not to return the metrics for each fold individually,
+        i.e. every row in the returned dataframe is the performance
+        of the fitted model for each fold. If False, it will
+        keep track of the predicted and true labels in the folds
+        and return the overall metric for the dataset.
+        If True, it will simply compute the metrics for each fold
+        indvidually. One can then obtain a single metric by
+        averaging over the performance over the different folds.
+        By default False. Ignored if k_fold=False.
+    results_output : str | None, optional
+        Path for where to save the results dataframe, by default None
+    verbose : bool, optional
+        Whether or not to print out progress, by default True
+
+    Returns
+    -------
+    tuple[pd.DataFrame, pd.DataFrame, float, dict]
+        A tuple containing the full results dataframe which includes the
+        performance of each of the models fitted during the hyperparameter
+        search for each of the seeds, the results dataframe for the best
+        performing model (based on the average validation metric performance),
+        the average validation metric performance of the best model, and
+        the hyperparameters which gave the best model.
     """
     if validation_metric not in ["accuracy", "f1"]:
         raise ValueError("validation_metric must be either 'accuracy' or 'f1'")
 
     # initialise SaveBestModel class
     model_output = f"best_bert_model_{_get_timestamp()}.pkl"
-    save_best_model = SaveBestModel(
+    best_model = SaveBestModel(
         metric=validation_metric, output=model_output, verbose=verbose
     )
 
@@ -601,7 +847,7 @@ def fine_tune_transformer_average_seed(
             print(f"scores for the different seeds: {scores}")
 
         # save best model according to averaged metric over the different seeds
-        save_best_model(
+        best_model(
             current_valid_metric=scores_mean,
             extra_info={
                 "learning_rate": lr,
@@ -665,4 +911,13 @@ def fine_tune_transformer_average_seed(
         print(f"saving the results dataframe to CSV in {results_output}")
         test_results_df.to_csv(results_output)
 
-    return test_results_df
+    # remove any models that have been saved
+    if os.path.exists(model_output):
+        os.remove(model_output)
+
+    return (
+        results_df,
+        test_results_df,
+        best_model.best_valid_metric,
+        checkpoint["extra_info"],
+    )
