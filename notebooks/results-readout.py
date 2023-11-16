@@ -39,7 +39,7 @@ def main():
         "-d",
         help="digits to round to",
         type=int,
-        default=4,
+        default=3,
     )
     args = parser.parse_args()
 
