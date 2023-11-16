@@ -29,6 +29,60 @@ def obtain_SWNUNetwork_input(
     seed: int = 42,
     path_indices: list | np.array | None = None,
 ) -> dict[str, torch.tensor | int]:
+    """
+    Function to obtain the input for a SW-unit model
+    (e.g. SWNUNetwork or SWMHAUNetwork).
+
+    Parameters
+    ----------
+    method : str
+        Dimension reduction method to use. See nlpsig.DimReduce for options
+    dimension : int
+        Dimension to reduce the embeddings to
+    df : pd.DataFrame
+        Dataframe containing the data
+    id_column : str
+        Name of the column which identifies each of the text, e.g.
+        - "text_id" (if each item in `df` is a word or sentence from a particular text),
+        - "user_id" (if each item in `df` is a post from a particular user),
+        - "timeline_id" (if each item in `df` is a post from a particular time)
+    label_column : str
+        Name of the column which are corresponds to the labels of the data
+    embeddings : np.array
+        Corresponding embeddings for each of the items in `df`
+    k : int
+        The history length to use
+    features : list[str] | str | None, optional
+        Which feature(s) to keep. If None, then doesn't keep any.
+    standardise_method : list[str] | str | None, optional
+        If not None, applies standardisation to the features, default None.
+        If a list is passed, must be the same length as `features`.
+        See nlpsig.PrepareData.pad() for options.
+    include_features_in_path : bool
+        Whether or not to keep the additional features
+        (e.g. time features) within the path.
+    include_features_in_input : bool
+        Whether or not to concatenate the additional features into the FFN
+    seed : int, optional
+        Seed to use for dimension reduction, by default 42
+    path_indices : list | np.array | None, optional
+        The indices in the batches that we want to train and evaluate on,
+        by default None. If supplied, we slice the path in this way
+
+    Returns
+    -------
+    dict[str, torch.tensor | int]
+        Dictionary where:
+        - "x_data" is a dictionary where:
+            - "path" is a tensor of the path to be passed
+              into the SeqSigNet network
+            - "features" is a tensor of the features
+              (e.g. time features or additional features)
+        - "input_channels" is the number of channels in the path
+        - "num_features" is the number of features
+          (e.g. time features or additional features)
+          (this is None if there are no additional features to concatenate)
+    """
     # use nlpsig to construct the path as a numpy array
     # first define how we construct the path
     path_specifics = {
@@ -75,7 +129,7 @@ def obtain_SWNUNetwork_input(
 
 def implement_swnu_network(
     num_epochs: int,
-    x_data: np.array | torch.Tensor | dict[str, np.array | torch.Tensor],
+    x_data: dict[str, np.array | torch.Tensor],
     y_data: torch.tensor | np.array,
     input_channels: int,
     num_features: int,
@@ -108,6 +162,124 @@ def implement_swnu_network(
     verbose_results: bool = False,
     verbose_model: bool = False,
 ) -> tuple[SWNUNetwork, pd.DataFrame]:
+    """
+    Function which takes in input variables, x_data,
+    and target output classification labels, y_data,
+    and train and evaluates a SWNUNetwork model.
+
+    If k_fold=True, it will evaluate the SWNUNetwork by performing
+    k-fold validation with n_splits number of folds (i.e. train and test
+    n_split number of SWNUNetwork models), otherwise, it will
+    evaluate by training and testing a single SWNUNetwork on one
+    particular split of the data.
+
+    Parameters
+    ----------
+    num_epochs : int
+        Number of epochs
+    x_data : dict[str, np.array | torch.Tensor]
+        A dictionary containing the input data. The keys should be
+        "path" and "features"
+    y_data : torch.tensor | np.array
+        Target classification labels
+    input_channels : int
+        Dimension of the embeddings in the path that will be passed in.
+    num_features : int
+        Number of time features to add to FFN input. If none, set to zero.
+    embedding_dim: int
+        Dimensions of current BERT post embedding. Usually 384 or 768.
+    log_signature : bool
+        Whether or not to use the log signature or standard signature.
+    sig_depth : int
+        The depth to truncate the path signature at.
+    pooling: str | None
+        Pooling operation to apply. If None, no pooling is applied.
+        Options are:
+            - "signature": apply signature on the LSTM units at the end
+                to obtain the final history representation
+            - "lstm": take the final (non-padded) LSTM unit as the final
+                history representation
+    swnu_hidden_dim : list[int] | int
+        Dimensions of the hidden layers in the SNWU blocks, can be int if a single
+        SWNU block, or can be a list of ints for multiple SWNU blocks
+    output_dim : int
+        Number of unique classification labels
+    BiLSTM : bool
+        Whether or not to use a BiLSTM in the SWNU units
+    dropout_rate : float
+        Droput rate to use in FFN
+    learning_rate : float
+        Learning rate to use
+    seed : int
+        Seed to use throughout (besides for splitting the data - see data_split_seed)
+    loss : str
+        Loss to use, options are "focal" for focal loss, and "cross_entropy" for
+        cross-entropy loss
+    gamma : float, optional
+        Gamma to use for focal loss, by default 0.0.
+        Ignored if loss="cross_entropy"
+    device : str | None, optional
+        Device to use for training and evaluation, by default None
+    batch_size: int, optional
+        Batch size, by default 64
+    output_channels : int | None, optional
+        Requested dimension of the embeddings after convolution layer.
+        If None, will be set to the last item in `swnu_hidden_dim`, by default None.
+    augmentation_type : str, optional
+        Method of augmenting the path, by default "Conv1d".
+        Options are:
+        - "Conv1d": passes path through 1D convolution layer.
+        - "signatory": passes path through `Augment` layer from `signatory` package.
+    hidden_dim_aug : list[int] | int | None
+        Dimensions of the hidden layers in the augmentation layer.
+        Passed into `Augment` class from `signatory` package if
+        `augmentation_type='signatory'`, by default None.
+    comb_method : str, optional
+        Determines how to combine the path signature and embeddings,
+        by default "gated_addition".
+        Options are:
+        - concatenation: concatenation of path signature and embedding vector
+        - gated_addition: element-wise addition of path signature
+            and embedding vector
+        - gated_concatenation: concatenation of linearly gated path signature
+            and embedding vector
+        - scaled_concatenation: concatenation of single value scaled path
+            signature and embedding vector
+    data_split_seed : int, optional
+        The seed which is used when splitting, by default 0
+    split_ids : torch.Tensor | None, optional
+        Groups to split by, default None
+    split_indices : tuple[Iterable[int] | None] | None, optional
+        Train, validation, test indices to use. If passed, will split the data
+        according to these indices rather than splitting it within the method
+        using the train_size and valid_size provided.
+        First item in the tuple should be the indices for the training set,
+        second item should be the indices for the validaton set (this could
+        be None if no validation set is required), and third item should be
+        indices for the test set
+    k_fold : bool, optional
+        Whether or not to use k-fold validation, by default False
+    n_splits : int, optional
+        Number of splits to use in k-fold validation, by default 5.
+        Ignored if k_fold=False
+    patience : int, optional
+        Patience of training, by default 10.
+    verbose_training : bool, optional
+        Whether or not to print out training progress, by default False
+    verbose_results : bool, optional
+        Whether or not to print out results on validation and test, by default False
+    verbose_model : bool, optional
+        Whether or not to print out the model, by default False
+
+    Returns
+    -------
+    tuple[SWNUNetwork, pd.DataFrame]
+        SWNUNetwork object (if k-fold, this is a randomly
+        initialised model, otherwise it has been trained on the data splits
+        that were generated within this function with data_split_seed),
+        and dataframe of the evaluation metrics for the validation and
+        test sets generated within this function.
+    """
     # set seed
     set_seed(seed)
 
@@ -185,7 +357,7 @@ def swnu_network_hyperparameter_search(
     dimensions: list[int],
     log_signature: bool,
     pooling: str,
-    swnu_hidden_dim_sizes_and_sig_depths: list[tuple[int, list[int] | list[list[int]]]],
+    swnu_hidden_dim_sizes_and_sig_depths: list[tuple[list[int] | int, int]],
     ffn_hidden_dim_sizes: list[int] | list[list[int]],
     dropout_rates: list[float],
     learning_rates: list[float],
@@ -213,13 +385,165 @@ def swnu_network_hyperparameter_search(
     validation_metric: str = "f1",
     results_output: str | None = None,
     verbose: bool = True,
-):
+) -> tuple[pd.DataFrame, pd.DataFrame, float, dict]:
+    """
+    Performs hyperparameter search for the SWNUNetwork model for different
+    SWNU hidden dimensions and sig depths, LSTM hidden dimensions,
+    FFN hidden dimensions, dropout rates, learning rates by training and
+    evaluating a SWNUNetworks on various seeds and averaging performance
+    over the seeds.
+
+    If k_fold=True, will perform k-fold validation on each seed and
+    average over the average performance over the folds, otherwise
+    will average over the performance of the SWNUNetwork
+    trained using each seed.
+
+    Parameters
+    ----------
+    num_epochs : int
+        Number of epochs
+    df : pd.DataFrame
+        Dataframe containing the data
+    id_column : str
+        Name of the column which identifies each of the text, e.g.
+        - "text_id" (if each item in `df` is a word or sentence from a particular text),
+        - "user_id" (if each item in `df` is a post from a particular user),
+        - "timeline_id" (if each item in `df` is a post from a particular time)
+    label_column : str
+        Name of the column which are corresponds to the labels of the data
+    embeddings : np.array
+        Corresponding embeddings for each of the items in `df`
+    y_data : torch.tensor | np.array
+        Target classification labels
+    output_dim : int
+        Number of unique classification labels
+    history_lengths : list[int]
+        A list of history lengths to use
+    dim_reduce_methods : list[str]
+        Methods for dimension reduction to try out.
+        Each element in the list should be a string.
+        See nlpsig.DimReduce for options.
+    dimensions : list[int]
+        Dimensions to reduce to
+    log_signature : bool
+        Whether or not to use the log signatures rather than standard signatures
+    pooling: str | None
+        Pooling operation to apply. If None, no pooling is applied.
+        Options are:
+            - "signature": apply signature on the LSTM units at the end
+                to obtain the final history representation
+            - "lstm": take the final (non-padded) LSTM unit as the final
+                history representation
+    swnu_hidden_dim_sizes_and_sig_depths : list[tuple[list[int] | int, int]]
+        A list of tuples, where each tuple contains the hidden dimensions
+        for the SWNU blocks and the signature depth to take. The hidden
+        dimensions can be a list of ints if multiple SWNU blocks, or can
+        be an int if a single SWNU block
+    ffn_hidden_dim_sizes : list[int] | list[list[int]]
+        Hidden dimensions in FFN to try out. Each element in the list
+        should be a list of ints if multiple hidden layers are required,
+        or an int if a single hidden layer is required
+    dropout_rates : list[float]
+        Dropout rates to try out. Each element in the list
+        should be a float
+    learning_rates : list[float]
+        Learning rates to try out. Each element in the list
+        should be a float
+    BiLSTM : bool
+        Whether or not to use a BiLSTM in the SWNU units
+    seeds : list[int]
+        Seeds to use throughout to average over the performance
+        (besides for splitting the data - see data_split_seed)
+    loss : str
+        Loss to use, options are "focal" for focal loss, and "cross_entropy" for
+        cross-entropy loss
+    gamma : float, optional
+        Gamma to use for focal loss, by default 0.0.
+        Ignored if loss="cross_entropy"
+    device : str | None, optional
+        Device to use for training and evaluation, by default None
+    batch_size: int, optional
+        Batch size, by default 64
+    features : list[str] | str | None, optional
+            Which feature(s) to keep. If None, then doesn't keep any.
+    standardise_method : list[str] | str | None, optional
+        If not None, applies standardisation to the features, default None.
+        If a list is passed, must be the same length as `features`.
+        See nlpsig.PrepareData.pad() for options.
+    include_features_in_path : bool
+        Whether or not to keep the additional features
+        (e.g. time features) within the path.
+    include_features_in_input : bool
+        Whether or not to concatenate the additional features into the FFN
+    conv_output_channels : list[int] | None, optional
+        List of requested dimensions of the embeddings after convolution layer.
+        If None, will be set to the last item in `swnu_hidden_dim`, by default None.
+    augmentation_type : str, optional
+        Method of augmenting the path, by default "Conv1d".
+        Options are:
+        - "Conv1d": passes path through 1D convolution layer.
+        - "signatory": passes path through `Augment` layer from `signatory` package.
+    hidden_dim_aug : list[int] | int | None
+        Dimensions of the hidden layers in the augmentation layer.
+        Passed into `Augment` class from `signatory` package if
+        `augmentation_type='signatory'`, by default None.
+    comb_method : str, optional
+        Determines how to combine the path signature and embeddings,
+        by default "gated_addition".
+        Options are:
+        - concatenation: concatenation of path signature and embedding vector
+        - gated_addition: element-wise addition of path signature
+            and embedding vector
+        - gated_concatenation: concatenation of linearly gated path signature
+            and embedding vector
+        - scaled_concatenation: concatenation of single value scaled path
+            signature and embedding vector
+    path_indices : list | np.array | None, optional
+        The indices in the batches that we want to train and evaluate on,
+        by default None. If supplied, we slice the resulting input data and target
+        classification labels in this way
+    data_split_seed : int, optional
+        The seed which is used when splitting, by default 0
+    split_ids : torch.Tensor | None, optional
+        Groups to split by, default None
+    split_indices : tuple[Iterable[int] | None] | None, optional
+        Train, validation, test indices to use. If passed, will split the data
+        according to these indices rather than splitting it within the method
+        using the train_size and valid_size provided.
+        First item in the tuple should be the indices for the training set,
+        second item should be the indices for the validaton set (this could
+        be None if no validation set is required), and third item should be
+        indices for the test set
+    k_fold : bool, optional
+        Whether or not to use k-fold validation, by default False
+    n_splits : int, optional
+        Number of splits to use in k-fold validation, by default 5.
+        Ignored if k_fold=False
+    patience : int, optional
+        Patience of training, by default 10.
+    validation_metric : str, optional
+        Metric to use to use for determining the best model, by default "f1"
+    results_output : str | None, optional
+        Path for where to save the results dataframe, by default None
+    verbose : bool, optional
+        Whether or not to print out progress, by default True
+
+    Returns
+    -------
+    tuple[pd.DataFrame, pd.DataFrame, float, dict]
+        A tuple containing the full results dataframe which includes the
+        performance of each of the models fitted during the hyperparameter
+        search for each of the seeds, the results dataframe for the best
+        performing model (based on the average validation metric performance),
+        the average validation metric performance of the best model, and
+        the hyperparameters which gave the best model.
+    """
     if validation_metric not in ["loss", "accuracy", "f1"]:
         raise ValueError("validation_metric must be either 'loss', 'accuracy' or 'f1'")
 
     # initialise SaveBestModel class
     model_output = f"best_swnu_network_model_{_get_timestamp()}.pkl"
-    save_best_model = SaveBestModel(
+    best_model = SaveBestModel(
         metric=validation_metric, output=model_output, verbose=verbose
     )
 
@@ -238,6 +562,7 @@ def swnu_network_hyperparameter_search(
 
     # find model parameters that has the best validation
     results_df = pd.DataFrame()
+    # start model_id counter
     model_id = 0
     for k in tqdm(history_lengths):
         if verbose:
@@ -384,7 +709,6 @@ def swnu_network_hyperparameter_search(
                                         # don't continue printing out the model
                                         verbose_model = False
 
-                                    model_id += 1
                                     scores_mean = sum(scores) / len(scores)
 
                                     if verbose:
@@ -395,9 +719,12 @@ def swnu_network_hyperparameter_search(
                                         print(
                                             f"scores for the different seeds: {scores}"
                                         )
+
                                     # save best model according to averaged metric
                                     # over the different seeds
-                                    save_best_model(
+                                    # if the score is better than the previous best,
+                                    # we save the parameters to model_output
+                                    best_model(
                                         current_valid_metric=scores_mean,
                                         extra_info={
                                             "k": k,
@@ -429,6 +756,9 @@ def swnu_network_hyperparameter_search(
                                         },
                                     )
 
+                                    # update model_id counter
+                                    model_id += 1
+
     checkpoint = torch.load(f=model_output)
     if verbose:
         print("*" * 50)
@@ -450,6 +780,8 @@ def swnu_network_hyperparameter_search(
         path_indices=path_indices,
     )
 
+    # implement model again and obtain the results dataframe
+    # and evaluate on the test set
     test_scores = []
     test_results_df = pd.DataFrame()
     for seed in seeds:
@@ -546,8 +878,9 @@ def swnu_network_hyperparameter_search(
         test_results_df = pd.concat([test_results_df, test_results])
 
     test_scores_mean = sum(test_scores) / len(test_scores)
+
     if verbose:
-        print(f"best validation score: {save_best_model.best_valid_metric}")
+        print(f"best validation score: {best_model.best_valid_metric}")
         print(f"- Best model: average (test) metric score: {test_scores_mean}")
         print(f"scores for the different seeds: {test_scores}")
 
@@ -571,6 +904,6 @@ def swnu_network_hyperparameter_search(
     return (
         results_df,
         test_results_df,
-        save_best_model.best_valid_metric,
+        best_model.best_valid_metric,
         checkpoint["extra_info"],
     )

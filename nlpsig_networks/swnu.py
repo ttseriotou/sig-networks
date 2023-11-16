@@ -242,7 +242,7 @@ class SWNU(nn.Module):
         Parameters
         ----------
         input_channels : int
-            Dimension of the embeddings that will be passed in.
+            Dimension of the embeddings in the path that will be passed in.
         log_signature : bool
             Whether or not to use the log signature or standard signature.
         sig_depth : int

@@ -44,8 +44,7 @@ class SeqSigNet(nn.Module):
         Parameters
         ----------
         input_channels : int
-            Dimension of the (dimensonally reduced) history embeddings
-            that will be passed in.
+            Dimension of the embeddings in the path that will be passed in.
         num_features : int
             Number of time features to add to FFN input. If none, set to zero.
         embedding_dim: int

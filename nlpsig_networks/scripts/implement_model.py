@@ -37,7 +37,71 @@ def implement_model(
     patience: int | None = 10,
     verbose_training: bool = False,
     verbose_results: bool = False,
-):
+) -> tuple[nn.Module, pd.DataFrame]:
+    """
+    Helper function to implement a model using PyTorch.
+
+    Can be used for both k-fold cross-validation and train-validation-test splits.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        PyTorch model which inherits from the `torch.nn.Module` class
+    num_epochs : int
+        Number of epochs
+    x_data : np.array | torch.Tensor | dict[str, np.array | torch.Tensor]
+        Input variables. This can be standard numpy arrays or torch tensors, and
+        can be a dictionary of arrays/tensors if the model expects multiple inputs
+    y_data : torch.tensor | np.array
+        Target classification labels
+    learning_rate : float
+        Learning rate to use
+    seed : int
+        Seed to use throughout (besides for splitting the data - see data_split_seed)
+    loss : str
+        Loss to use, options are "focal" for focal loss, and "cross_entropy" for
+        cross-entropy loss
+    gamma : float, optional
+        Gamma to use for focal loss, by default 0.0.
+        Ignored if loss="cross_entropy"
+    device : str | None, optional
+        Device to use for training and evaluation, by default None
+    batch_size: int, optional
+        Batch size, by default 64
+    data_split_seed : int, optional
+        The seed which is used when splitting, by default 0
+    split_ids : torch.Tensor | None, optional
+        Groups to split by, default None
+    split_indices : tuple[Iterable[int] | None] | None, optional
+        Train, validation, test indices to use. If passed, will split the data
+        according to these indices rather than splitting it within the method
+        using the train_size and valid_size provided.
+        First item in the tuple should be the indices for the training set,
+        second item should be the indices for the validaton set (this could
+        be None if no validation set is required), and third item should be
+        indices for the test set
+    k_fold : bool, optional
+        Whether or not to use k-fold validation, by default False
+    n_splits : int, optional
+        Number of splits to use in k-fold validation, by default 5.
+        Ignored if k_fold=False
+    patience : int, optional
+        Patience of training, by default 10.
+    verbose_training : bool, optional
+        Whether or not to print out training progress, by default True
+    verbose_results : bool, optional
+        Whether or not to print out results on validation and test, by default True
+
+
+    Returns
+    -------
+    tuple[torch.nn.Module, pd.DataFrame]
+        The trained model (if k-fold, this is a randomly
+        initialised model, otherwise it has been trained on the data splits
+        that were generated within this function with data_split_seed),
+        and dataframe of the evaluation metrics for the validation and
+        test sets generated within this function.
+    """
     # set some variables for training
     return_best = True
     early_stopping = patience is not None

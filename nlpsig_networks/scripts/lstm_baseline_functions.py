@@ -100,9 +100,11 @@ def implement_lstm(
     patience : int, optional
         Patience of training, by default 10.
     verbose_training : bool, optional
-        Whether or not to print out training progress, by default True
+        Whether or not to print out training progress, by default False
     verbose_results : bool, optional
-        Whether or not to print out results on validation and test, by default True
+        Whether or not to print out results on validation and test, by default False
+    verbose_model : bool, optional
+        Whether or not to print out the model, by default False
 
     Returns
     -------
@@ -166,6 +168,34 @@ def obtain_path(
     k: int,
     path_indices: list | np.array | None = None,
 ) -> torch.tensor:
+    """
+    Function for obtaining the path from the history of the embeddings.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataframe containing the data
+    id_column : str
+        Name of the column which identifies each of the text, e.g.
+        - "text_id" (if each item in `df` is a word or sentence from a particular text),
+        - "user_id" (if each item in `df` is a post from a particular user),
+        - "timeline_id" (if each item in `df` is a post from a particular time)
+    label_column : str
+        Name of the column which are corresponds to the labels of the data
+    embeddings : np.array
+        Corresponding embeddings for each of the items in `df`
+    k : int
+        The history length to use
+    path_indices : list | np.array | None, optional
+        The indices in the batches that we want to train and evaluate on,
+        by default None. If supplied, we slice the path in this way
+
+    Returns
+    -------
+    torch.tensor
+        Path constructed from the history of the embeddings as a
+        three-dimensional torch tensor of shape [num_batches, k, embedding_dim]
+    """
     # use nlpsig to construct the path as a numpy array
     # first define how we construct the path
     path_specifics = {
@@ -228,7 +258,8 @@ def lstm_hyperparameter_search(
     verbose: bool = True,
 ) -> tuple[pd.DataFrame, pd.DataFrame, float, dict]:
     """
-    Performs hyperparameter search for different hidden dimensions,
+    Performs hyperparameter search for the baseline LSTM model
+    for different history lengths, hidden dimensions,
     dropout rates, learning rates by training and evaluating
     a LSTM on various seeds and averaging performance over the seeds.
 
@@ -240,50 +271,69 @@ def lstm_hyperparameter_search(
     Parameters
     ----------
     num_epochs : int
-        _description_
+        Number of epochs
     x_data : torch.tensor | np.array
-        _description_
+        Input variables
     y_data : torch.tensor | np.array
-        _description_
+        Target classification labels
     output_dim : int
         Number of unique classification labels
     hidden_dim_sizes : list[int]
-        _description_
+        Hidden dimensions in LSTM to try out. Each element in the list
+        should be an int
     dropout_rates : list[float]
-        _description_
+        Dropout rates to try out. Each element in the list
+        should be a float
     learning_rates : list[float]
-        _description_
+        Learning rates to try out. Each element in the list
+        should be a float
     seeds : list[int]
-        _description_
+        Seeds to use throughout to average over the performance
+        (besides for splitting the data - see data_split_seed)
     loss : str
-        _description_
+        Loss to use, options are "focal" for focal loss, and
+        "cross_entropy" for cross-entropy loss.
     gamma : float, optional
-        _description_, by default 0.0
-    batch_size : int, optional
-        _description_, by default 64
+        Value of gamma in focal loss, by default 0.0.
+        Ignored if loss="cross_entropy".
+    batch_size: int, optional
+        Batch size to use in training, by default 64.
     data_split_seed : int, optional
-        _description_, by default 0
+        The seed which is used when splitting, by default 0
     split_ids : torch.Tensor | None, optional
-        _description_, by default None
+        Groups to split by, default None.
     split_indices : tuple[Iterable[int] | None] | None, optional
-        _description_, by default None
+        Train, validation, test indices to use. If passed, will split the data
+        according to these indices rather than splitting it within the method
+        using the train_size and valid_size provided.
+        First item in the tuple should be the indices for the training set,
+        second item should be the indices for the validaton set (this could
+        be None if no validation set is required), and third item should be
+        indices for the test set.
     k_fold : bool, optional
-        _description_, by default False
+        Whether or not to use k-fold validation, by default False
     n_splits : int, optional
-        _description_, by default 5
-    patience: int, optional
-        _description_, by default 10
+        Number of splits to use in k-fold validation, by default 5.
+        Ignored if k_fold=False
+    patience : int, optional
+        Patience of training, by default 10.
     validation_metric : str, optional
-        _description_, by default "f1"
+        Metric to use to use for determining the best model, by default "f1"
     results_output : str | None, optional
-        _description_, by default None
+        Path for where to save the results dataframe, by default None
     verbose : bool, optional
-        _description_, by default True
+        Whether or not to print out progress, by default True
+
 
     Returns
     -------
     tuple[pd.DataFrame, pd.DataFrame, float, dict]
-        _description_
+        A tuple containing the full results dataframe which includes the
+        performance of each of the models fitted during the hyperparameter
+        search for each of the seeds, the results dataframe for the best
+        performing model (based on the average validation metric performance),
+        the average validation metric performance of the best model, and
+        the hyperparameters which gave the best model.
     """
     if validation_metric not in ["loss", "accuracy", "f1"]:
         raise ValueError("validation_metric must be either 'loss', 'accuracy' or 'f1'")
@@ -375,7 +425,6 @@ def lstm_hyperparameter_search(
                         # don't continue printing out the model
                         verbose_model = False
 
-                    model_id += 1
                     scores_mean = sum(scores) / len(scores)
 
                     if verbose:
@@ -384,8 +433,11 @@ def lstm_hyperparameter_search(
                             f"(validation) metric score: {scores_mean}"
                         )
                         print(f"scores for the different seeds: {scores}")
+
                     # save best model according to averaged
                     # metric over the different seeds
+                    # if the score is better than the previous best,
+                    # we save the parameters to model_output
                     save_best_model(
                         current_valid_metric=scores_mean,
                         extra_info={
@@ -398,12 +450,18 @@ def lstm_hyperparameter_search(
                         },
                     )
 
+                    # update model_id counter
+                    model_id += 1
+
+    # load the parameters that gave the best model according to the validation metric
     checkpoint = torch.load(f=model_output)
     if verbose:
         print("*" * 50)
         print("The best model had the following parameters:")
         print(checkpoint["extra_info"])
 
+    # implement model again and obtain the results dataframe
+    # and evaluate on the test set
     test_scores = []
     test_results_df = pd.DataFrame()
     for seed in seeds:
