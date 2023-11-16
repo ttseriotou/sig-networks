@@ -27,12 +27,6 @@ if not os.path.isdir(output_dir):
 with open("anno_mi_sbert.pkl", "rb") as f:
     sbert_embeddings = pickle.load(f)
 
-# set features
-features = ["time_encoding_minute", "timeline_index"]
-standardise_method = [None, None]
-include_features_in_path = True
-include_features_in_input = False
-
 # set hyperparameters
 num_epochs = 100
 hidden_dim_sizes = [[64, 64], [128, 128], [256, 256], [512, 512]]
