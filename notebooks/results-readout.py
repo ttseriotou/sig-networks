@@ -85,6 +85,12 @@ def main():
         k = shift * n + (window_size - shift)
         readout_results_from_csv(file, model_name=f"SeqSigNet (size={k})", digits=args.digits)
 
+    # readout SeqSigNetAttentionBiLSTM
+    for shift, window_size, n in seqsignet_sizes:
+        file = f"{args.results_dir}/seqsignet_attention_bilstm_umap_focal_{gamma}_{shift}_{window_size}_{n}_kfold_best_model.csv"
+        k = shift * n + (window_size - shift)
+        readout_results_from_csv(file, model_name=f"SeqSigNetAttentionBiLSTM (size={k})", digits=args.digits)
+    
     # readout SeqSigNetAttentionEncoder
     for shift, window_size, n in seqsignet_sizes:
         file = f"{args.results_dir}/seqsignet_attention_encoder_umap_focal_{gamma}_{shift}_{window_size}_{n}_kfold_best_model.csv"
