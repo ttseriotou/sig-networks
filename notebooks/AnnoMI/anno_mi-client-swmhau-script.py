@@ -83,7 +83,7 @@ kwargs = {
 }
 
 # run hyperparameter search
-lengths = [5, 11, 20, 35, 80]
+lengths = [5, 11, 20, 35]
 
 for size in lengths:
     print(f"history_length: {size}")

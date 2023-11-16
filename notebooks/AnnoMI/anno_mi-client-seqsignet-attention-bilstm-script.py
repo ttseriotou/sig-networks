@@ -85,7 +85,7 @@ kwargs = {
 }
 
 # run hyperparameter search
-lengths = [(3, 5, 3), (3, 5, 6), (3, 5, 11), (3, 5, 26)]
+lengths = [(3, 5, 3), (3, 5, 6), (3, 5, 11)]
 
 for shift, window_size, n in lengths:
     print(f"shift: {shift}, window_size: {window_size}, n: {n}")

@@ -45,8 +45,8 @@ def main():
 
     # these variables are manually set for now:
     gamma = 2
-    sizes = [5, 11, 20, 35, 80]
-    seqsignet_sizes = [(3, 5, 3), (3, 5, 6), (3, 5, 11), (3, 5, 26)]
+    sizes = [5, 11, 20, 35]
+    seqsignet_sizes = [(3, 5, 3), (3, 5, 6), (3, 5, 11)]
     
     # readout FFN
     file = f"{args.results_dir}/ffn_current_focal_{gamma}_kfold_best_model.csv"
