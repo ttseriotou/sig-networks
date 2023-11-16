@@ -56,6 +56,12 @@ jobs:
         run: |
           pip install torch==1.9.0
 
+      - name: Debug installed packages
+        run: pip list
+
+      - name: Debug Python environment
+        run: python -V
+
       - name: Install signatory
         run: |
           pip install signatory==1.2.6.1.9.0 --no-cache-dir --force-reinstall
