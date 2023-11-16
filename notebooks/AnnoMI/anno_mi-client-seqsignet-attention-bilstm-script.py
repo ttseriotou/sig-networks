@@ -1,16 +1,20 @@
-import numpy as np
-import pickle
+from __future__ import annotations
+
 import os
+import pickle
+
+import numpy as np
 import torch
-from nlpsig_networks.scripts.seqsignet_attention_bilstm_functions import (
-    seqsignet_attention_bilstm_hyperparameter_search,
-)
 from load_anno_mi import (
     anno_mi,
-    y_data_client,
-    output_dim_client,
     client_index,
     client_transcript_id,
+    output_dim_client,
+    y_data_client,
+)
+
+from sig_networks.scripts.seqsignet_attention_bilstm_functions import (
+    seqsignet_attention_bilstm_hyperparameter_search,
 )
 
 seed = 2023
@@ -104,9 +108,7 @@ for shift, window_size, n in lengths:
     )
 
     print(f"F1: {best_seqsignet_network_umap_kfold['f1'].mean()}")
-    print(
-        f"Precision: {best_seqsignet_network_umap_kfold['precision'].mean()}"
-    )
+    print(f"Precision: {best_seqsignet_network_umap_kfold['precision'].mean()}")
     print(f"Recall: {best_seqsignet_network_umap_kfold['recall'].mean()}")
     print(
         "F1 scores: "

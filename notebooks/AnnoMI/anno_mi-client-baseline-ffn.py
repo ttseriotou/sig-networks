@@ -1,15 +1,19 @@
-import numpy as np
-import pickle
+from __future__ import annotations
+
 import os
+import pickle
+
+import numpy as np
 import torch
-from nlpsig_networks.scripts.ffn_baseline_functions import (
-    ffn_hyperparameter_search,
-)
 from load_anno_mi import (
-    y_data_client,
-    output_dim_client,
     client_index,
     client_transcript_id,
+    output_dim_client,
+    y_data_client,
+)
+
+from sig_networks.scripts.ffn_baseline_functions import (
+    ffn_hyperparameter_search,
 )
 
 seed = 2023
@@ -64,14 +68,9 @@ ffn_current_kfold, best_ffn_current_kfold, _, __ = ffn_hyperparameter_search(
 )
 
 print(f"F1: {best_ffn_current_kfold['f1'].mean()}")
-print(
-    f"Precision: {best_ffn_current_kfold['precision'].mean()}"
-)
+print(f"Precision: {best_ffn_current_kfold['precision'].mean()}")
 print(f"Recall: {best_ffn_current_kfold['recall'].mean()}")
-print(
-    "F1 scores: "
-    f"{np.stack(best_ffn_current_kfold['f1_scores']).mean(axis=0)}"
-)
+print("F1 scores: " f"{np.stack(best_ffn_current_kfold['f1_scores']).mean(axis=0)}")
 print(
     "Precision scores: "
     f"{np.stack(best_ffn_current_kfold['precision_scores']).mean(axis=0)}"

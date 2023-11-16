@@ -1,16 +1,20 @@
-import numpy as np
-import pickle
+from __future__ import annotations
+
 import os
+import pickle
+
+import numpy as np
 import torch
-from nlpsig_networks.scripts.swmhau_network_functions import (
-    swmhau_network_hyperparameter_search,
-)
 from load_anno_mi import (
     anno_mi,
-    y_data_client,
-    output_dim_client,
     client_index,
     client_transcript_id,
+    output_dim_client,
+    y_data_client,
+)
+
+from sig_networks.scripts.swmhau_network_functions import (
+    swmhau_network_hyperparameter_search,
 )
 
 seed = 2023
