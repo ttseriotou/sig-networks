@@ -58,7 +58,7 @@ jobs:
 
       - name: Install signatory
         run: |
-          pip install signatory==1.2.6.1.9.0
+          pip install signatory==1.2.6.1.9.0 --no-cache-dir --force-reinstall
 
       - name: Install package
         run: python -m pip install .[test]
