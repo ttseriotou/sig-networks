@@ -15,6 +15,13 @@ SigNetworks is available on PyPI and can be installed with pip:
 pip install sig_networks
 ```
 
+Note that currently `sig_networks` only supports Python 3.8 since it relies on
+the [`signatory`](https://github.com/patrick-kidger/signatory) library. However,
+it is possible to install `signatory` with more recent Python and PyTorch
+versions if you install it from source. See the installation guide in the
+[signatory documentation](https://signatory.readthedocs.io/en/latest/pages/usage/installation.html)
+for more details.
+
 ### Signatory/Torch
 
 SigNetworks depends on the
@@ -35,6 +42,10 @@ pip install signatory==1.2.6.1.9.0
 # install sig_networks
 pip install sig_networks
 ```
+
+If you encounter any issues with the installation of `signatory`, please see the
+FAQs in the
+[signatory documentation](https://signatory.readthedocs.io/en/latest/pages/miscellaneous/faq.html).
 
 ## Usage
 
@@ -64,9 +75,106 @@ fashion. The key components are:
 - The SeqSigNet-Attention-BiLSTM model:
   [`sig_networks.SeqSigNetAttentionBiLSTM`](src/sig_networks/seqsignet_attention_bilstm.py)
 
+### Using the SWNU and SWMHAU modules
+
+The Signature Window units (SWNU and SWMHAU) accept a batch of streams and
+returns a batch of feature representations. For example:
+
 ```python
-...
+from sig_networks.swnu import SWNU
+import torch
+
+# initialise a SWNU object
+swnu = SWNU(
+    input_channels=10,
+    hidden_dim=5,
+    log_signature=False,
+    sig_depth=3,
+    pooling="signature",
+    BiLSTM=True,
+)
+
+# create a three-dimensional tensor of batched streams
+# shape [batch, length, channels] where channels = 10
+streams = torch.randn(2, 20, 10)
+
+# pass the streams through the SWNU
+features = swnu(streams)
+
+# features is a two-dimensional tensor of shape [batch, signature_channels]
+features.shape
 ```
+
+The SWMHAU is similar to the SWNU, but rather than having an LSTM to process the
+signature streams, we have a multihead-attention layer. For example:
+
+```python
+from sig_networks.swmhau import SWMHAU
+import torch
+
+# initialise a SWMHAU object
+swmhau = SWMHAU(
+    input_channels=10,
+    output_channels=5,
+    log_signature=False,
+    sig_depth=3,
+    num_heads=5,
+    num_layers=1,
+    dropout_rate=0.1,
+    pooling="signature",
+)
+
+# create a three-dimensional tensor of batched streams
+# shape [batch, length, channels] where channels = 10
+streams = torch.randn(2, 20, 10)
+
+# pass the streams through the SWMHAU
+features = swmhau(streams)
+
+# features is a two-dimensional tensor of shape [batch, signature_channels]
+features.shape
+```
+
+Note in the above, we used the `pooling="signature"` option. This means that at
+the end of the SWNU/SWMHAU, we will take a final signature of the streams to get
+a fixed-length feature representation for each item in the batch. There are
+other options such as taking the final LSTM hidden state for SWNU (set
+`pooling="lstm"`), or using a CLS pooling for SWMHAU (set `pooling="cls"`).
+There is another option where `pooling=None` which means that the SWNU/SWMHAU
+where no pooling is applied at the end of the SWNU/SWMHAU and the output is a
+three-dimensional tensor of shape `[batch, length, hidden_dim]`.
+
+### Using the network models
+
+The library also has the SWNU-Network and SeqSigNet models as introduced in
+[Sequential Path Signature Networks for Personalised Longitudinal Language Modeling](https://aclanthology.org/2023.findings-acl.310/).
+
+Since then, there have been developments of other models which utilise the SWNUs
+and SWMHAUs discussed above. Each of these models are avaliable as PyTorch
+modules which can be initialised and trained in the usual way.
+
+For SWNU-Network and SWMHAU-Network models, they expect two inputs:
+
+1. `path`: a batch of streams of shape `[batch, length, channels]` - these get
+   processed by the SWNU/SWMHAU
+2. `features`: a batch of features of shape `[batch, features]` - these get
+   concatenated with the output of the SWNU/SWMHAU to be fed into a FFN layer
+
+For SeqSigNet models (e.g. SeqSigNet, SeqSigNet-Attention-Encoder,
+SeqSigNet-Attention-BiLSTM), they also expect two inputs but the path is
+slightly different:
+
+1. `path`: a batch of streams of shape `[batch, units, length, channels]` - each
+   of the units for each batch will get processed by the SWNU/SWMHAU.
+   Afterwards, there is a global network to process the outputs of the
+   SWNU/SWMHAU in order to pool the outputs into a single fixed-length feature
+   represenation for the history. The global network can either be a BiLSTM (in
+   the case of SeqSigNet and SeqSigNet-Attention-BiLSTM) or a Transformer
+   Encoder (in the case of SeqSigNet-Attention-Encoder).
+2. `features`: a batch of features of shape `[batch, features]` - these get
+   concatenated with the output of the global network (either BiLSTM or a
+   Transformer Encoder) that processes the outputs of SWNU and SWMHAU to be fed
+   into a FFN layer
 
 ## Pre-commit and linters
 

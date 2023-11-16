@@ -266,7 +266,7 @@ class SWMHAU(nn.Module):
     def __init__(
         self,
         input_channels: int,
-        output_channels: int | None,
+        output_channels: int,
         log_signature: bool,
         sig_depth: int,
         num_heads: int,
