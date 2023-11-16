@@ -24,17 +24,35 @@ PyTorch. Please see the
 [signatory documentation](https://signatory.readthedocs.io/en/latest/) for
 installation instructions of the signatory library.
 
+A common `signatory` installation issue is that the installation requires that
+you already have PyTorch installed. In this case, you can try the following:
+
+```bash
+# install PyTorch
+pip install torch==1.9.0
+# install signatory
+pip install signatory==1.2.6.1.9.0
+# install sig_networks
+pip install sig_networks
+```
+
 ## Usage
 
-The key components in the _signature-window_ model s presented in (see
+The key components in the _signature-window_ models presented in (see
 [Sequential Path Signature Networks for Personalised Longitudinal Language Modeling](https://aclanthology.org/2023.findings-acl.310/)
 for full details) are written as PyTorch modules which can be used in a modular
 fashion. The key components are:
 
 - The Signature Window Network Units (SWNUs):
   [`sig_networks.SWNU`](src/sig_networks/swnu.py)
+  - There also exists the SWLSTM module which does not include the
+    1D-convolution layer at the start of the SWNU:
+    [`sig_networks.SWLSTM`](src/sig_networks/swnu.py)
 - The Signature Window (Multihead-)Attention Units (SWMHAUs):
   [`sig_networks.SWMHAU`](src/sig_networks/swmhau.py)
+  - As with the SWNU, there also exists the SWMHA module which does not include
+    the 1D-convolution layer at the start of the SWMHAU:
+    [`sig_networks.SWMHA`](src/sig_networks/swmhau.py)
 - The SWNU-Network model:
   [`sig_networks.SWNUNetwork`](src/sig_networks/swnu_network.py)
 - The SWMHAU-Network model:
