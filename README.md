@@ -71,7 +71,7 @@ fashion. The key components are:
 - The SeqSigNet model:
   [`sig_networks.SeqSigNet`](src/sig_networks/seqsignet_bilstm.py)
 - The SeqSigNet-Attention-Encoder model:
-  [`sig_networks.SeqSigNetAttentionEncoder`](src/sig_networks/seqsignet_attention.py)
+  [`sig_networks.SeqSigNetAttentionEncoder`](src/sig_networks/seqsignet_attention_encoder.py)
 - The SeqSigNet-Attention-BiLSTM model:
   [`sig_networks.SeqSigNetAttentionBiLSTM`](src/sig_networks/seqsignet_attention_bilstm.py)
 
