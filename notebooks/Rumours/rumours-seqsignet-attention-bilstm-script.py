@@ -1,11 +1,15 @@
-import numpy as np
+from __future__ import annotations
+
 import os
+
+import numpy as np
 import torch
-from nlpsig_networks.scripts.seqsignet_attention_bilstm_functions import (
+from load_rumours import df_rumours, output_dim, split_ids, y_data
+from load_sbert_embeddings import sbert_embeddings
+
+from sig_networks.scripts.seqsignet_attention_bilstm_functions import (
     seqsignet_attention_bilstm_hyperparameter_search,
 )
-from load_sbert_embeddings import sbert_embeddings
-from load_rumours import df_rumours, y_data, output_dim, split_ids
 
 seed = 2023
 
@@ -93,9 +97,7 @@ for shift, window_size, n in lengths:
     )
 
     print(f"F1: {best_seqsignet_network_umap_kfold['f1'].mean()}")
-    print(
-        f"Precision: {best_seqsignet_network_umap_kfold['precision'].mean()}"
-    )
+    print(f"Precision: {best_seqsignet_network_umap_kfold['precision'].mean()}")
     print(f"Recall: {best_seqsignet_network_umap_kfold['recall'].mean()}")
     print(
         "F1 scores: "

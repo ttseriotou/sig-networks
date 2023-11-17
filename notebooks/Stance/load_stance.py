@@ -18,6 +18,7 @@ with open(data_path, "r") as f:
 ########## Conversion to Timeline#### ############
 ##################################################
 
+
 # Convert conversation thread to linear timeline: we use timestamps
 # of each post in the twitter thread to obtain a chronologically ordered list.
 def tree2timeline(conversation):
@@ -42,6 +43,7 @@ def tree2timeline(conversation):
     sorted_replies = [x for (y, x) in sorted(zip(replies_timestamp, replies_idstr))]
     timeline.extend(sorted_replies)
     return timeline
+
 
 stance_timelines = {"dev": [], "train": [], "test": []}
 count_threads = 0
@@ -92,14 +94,14 @@ df = df.reset_index(drop=True)
 ##################################################
 ########## Label Mapping #########################
 ##################################################
-#labels in numbers
+# labels in numbers
 dictl = {}
-dictl['support'] = 0
-dictl['deny'] = 1
-dictl['comment'] = 2
-dictl['query'] = 3
+dictl["support"] = 0
+dictl["deny"] = 1
+dictl["comment"] = 2
+dictl["query"] = 3
 
-#Get the numerical labels
+# Get the numerical labels
 df = df.replace({"label": dictl})
 
 ##################################################
