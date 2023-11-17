@@ -47,6 +47,16 @@ If you encounter any issues with the installation of `signatory`, please see the
 FAQs in the
 [signatory documentation](https://signatory.readthedocs.io/en/latest/pages/miscellaneous/faq.html).
 
+## Repo structure
+
+The key parts of the libary are found in [`src/`](src/):
+
+- [`src/sig_networks/`](src/sig_networks/) contains the source code for the
+  models and includes PyTorch modules for the various components of the models
+  (see below for more usage details)
+- [`src/scripts/`](src/scripts/) contains some helper scripts for training and
+  evaluating the models
+
 ## Usage
 
 The key components in the _signature-window_ models presented in (see
