@@ -85,6 +85,41 @@ fashion. The key components are:
 - The SeqSigNet-Attention-BiLSTM model:
   [`sig_networks.SeqSigNetAttentionBiLSTM`](src/sig_networks/seqsignet_attention_bilstm.py)
 
+### `nlpsig`: Preparing the data
+
+The functionality to prepare the data for the SW-models and constructing paths
+and inputs are found in the [`nlpsig`](https://github.com/datasig-ac-uk/nlpsig)
+library which can be easily installed using `pip` and comes as a dependency in
+`sig-networks`.
+
+Paths can be constructed using the
+[`nlpsig.PrepareData`](https://nlpsig.readthedocs.io/en/latest/data_preparation.html)
+class. Furthermore, there is functionality within the
+[`nlpsig.TextEncoder`](https://nlpsig.readthedocs.io/en/latest/encode_text.html#nlpsig.encode_text.TextEncoder)
+and
+[`nlpsig.SentenceEncoder`](https://nlpsig.readthedocs.io/en/latest/encode_text.html#nlpsig.encode_text.SentenceEncoder)
+classes to obtain embeddings using transformers to be used as the channels in
+the paths. Since we want to take path signatures within the SW-models, we need
+to ensure that the number of channels in the path are low enough that we can
+take the path signatures efficiently. To enable this, there are also a number of
+dimensionality reduction methods in the `nlpsig` library - see
+[`nlpsig.DimReduce`](https://nlpsig.readthedocs.io/en/latest/dimensionality_reduction.html).
+
+For full details, see the
+[`nlpsig` GitHub repo](https://github.com/datasig-ac-uk/nlpsig) and there are
+examples of using the library in the [`examples/`](examples/) directory.
+
+Note that for obtaining inputs to the SWNU-/SWMHA-Networks and the SeqSigNet
+family models, there are helper functions in the scripts (see e.g.
+`obtain_SWNUNetwork_input` in
+[`src/scripts/swnu_network_functions.py`](src/scripts/swnu_network_functions.py)
+and `obtain_SeqSigNet_input` in
+[`src/scripts/seqsignet_functions.py`](src/scripts/seqsignet_functions.py)).
+There is also examples run-throughs in the [`examples/`](examples/) directory:
+
+- [Training a SWNU-Network model for Anno-MI client-talk-type prediction](examples/AnnoMI/anno_mi-client-swnu-example.ipynb)
+- [Training a SeqSigNet model for Anno-MI client-talk-type prediction](examples/AnnoMI/anno_mi-client-seqsignet-example.ipynb)
+
 ### Using the SWNU and SWMHAU modules
 
 The Signature Window units (SWNU and SWMHAU) accept a batch of streams and
@@ -185,6 +220,13 @@ slightly different:
    concatenated with the output of the global network (either BiLSTM or a
    Transformer Encoder) that processes the outputs of SWNU and SWMHAU to be fed
    into a FFN layer
+
+### Example experiments
+
+In the [`examples/`](examples/) directory, there are some example experiments
+using the library to comapre the SW-models with other baseline models such as a
+simple FFN, a BiLSTM model on the sentence-transformer representations and using
+a pre-trained Transformer model for classification.
 
 ## Pre-commit and linters
 
