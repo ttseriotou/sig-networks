@@ -10,6 +10,12 @@ sequential models using the notion of path signatures from rough path theory.
 For more details of this library, see our demo paper
 [Sig-Networks Toolkit: Signature Networks for Longitudinal Language Modelling](https://arxiv.org/abs/2312.03523).
 
+For some quick examples without having to install anything on your personal
+machine, we have a few examples on [Deepnote](https://deepnote.com/) - you will
+need to duplicate the project to run it yourself though:
+
+- [SWNU Network example on Anno-MI dataset](https://deepnote.com/workspace/longnlp-c56d99b4-d42f-4567-a886-b7583212b165/project/Rumour-Networks-Tutorial-85a9b1ef-1102-48ff-af03-1cd5696a5b12/notebook/Anno-MI%20SWNU%20example-273cd08b2204442f9da73a8f2e22080b)
+
 ## Installation
 
 SigNetworks is available on PyPI and can be installed with pip:
@@ -125,6 +131,10 @@ and `obtain_SeqSigNet_input` in
 There is also examples run-throughs in the [`examples/`](examples/) directory:
 
 - [Training a SWNU-Network model for Anno-MI client-talk-type prediction](examples/AnnoMI/anno_mi-client-swnu-example.ipynb)
+  - Note that this notebook is also on [Deepnote](https://deepnote.com/):
+    [Anno-MI SWNU example](https://deepnote.com/workspace/longnlp-c56d99b4-d42f-4567-a886-b7583212b165/project/Rumour-Networks-Tutorial-85a9b1ef-1102-48ff-af03-1cd5696a5b12/notebook/Anno-MI%20SWNU%20example-273cd08b2204442f9da73a8f2e22080b)
+  - Note that you will need to duplicate the project so that you can run the
+    notebook yourself
 - [Training a SeqSigNet model for Anno-MI client-talk-type prediction](examples/AnnoMI/anno_mi-client-seqsignet-example.ipynb)
 
 ### Using the SWNU and SWMHAU modules
