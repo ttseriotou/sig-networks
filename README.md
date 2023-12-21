@@ -7,7 +7,8 @@ library that applies models first developed in
 by Tseriotou et al. (2023) which presented a novel extension of neural
 sequential models using the notion of path signatures from rough path theory.
 
-For more details of this library, see our demo paper [Sig-Networks Toolkit: Signature Networks for Longitudinal Language Modelling](https://arxiv.org/abs/2312.03523).
+For more details of this library, see our demo paper
+[Sig-Networks Toolkit: Signature Networks for Longitudinal Language Modelling](https://arxiv.org/abs/2312.03523).
 
 ## Installation
 
@@ -87,7 +88,9 @@ fashion. The key components are:
 - The SeqSigNet-Attention-BiLSTM model:
   [`sig_networks.SeqSigNetAttentionBiLSTM`](src/sig_networks/seqsignet_attention_bilstm.py)
 
-Also see our demo paper [Sig-Networks Toolkit: Signature Networks for Longitudinal Language Modelling](https://arxiv.org/abs/2312.03523) for details of each of these model components.
+Also see our demo paper
+[Sig-Networks Toolkit: Signature Networks for Longitudinal Language Modelling](https://arxiv.org/abs/2312.03523)
+for details of each of these model components.
 
 ### `nlpsig`: Preparing the data
 
