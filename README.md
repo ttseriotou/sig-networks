@@ -7,6 +7,8 @@ library that applies models first developed in
 by Tseriotou et al. (2023) which presented a novel extension of neural
 sequential models using the notion of path signatures from rough path theory.
 
+For more details of this library, see our demo paper [Sig-Networks Toolkit: Signature Networks for Longitudinal Language Modelling](https://arxiv.org/abs/2312.03523).
+
 ## Installation
 
 SigNetworks is available on PyPI and can be installed with pip:
@@ -85,6 +87,8 @@ fashion. The key components are:
 - The SeqSigNet-Attention-BiLSTM model:
   [`sig_networks.SeqSigNetAttentionBiLSTM`](src/sig_networks/seqsignet_attention_bilstm.py)
 
+Also see our demo paper [Sig-Networks Toolkit: Signature Networks for Longitudinal Language Modelling](https://arxiv.org/abs/2312.03523) for details of each of these model components.
+
 ### `nlpsig`: Preparing the data
 
 The functionality to prepare the data for the SW-models and constructing paths
@@ -123,7 +127,11 @@ There is also examples run-throughs in the [`examples/`](examples/) directory:
 ### Using the SWNU and SWMHAU modules
 
 The Signature Window units (SWNU and SWMHAU) accept a batch of streams and
-returns a batch of feature representations. For example:
+returns a batch of feature representations.
+
+![A plot of the Signature Window Unit and its variations (SWNU and SWMHAU)](fig/sw_unit.png)
+
+For example:
 
 ```python
 from sig_networks.swnu import SWNU
