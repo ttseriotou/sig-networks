@@ -7,8 +7,8 @@ library that applies models first developed in
 by Tseriotou et al. (2023) which presented a novel extension of neural
 sequential models using the notion of path signatures from rough path theory.
 
-For more details of this library, see our demo paper
-[Sig-Networks Toolkit: Signature Networks for Longitudinal Language Modelling](https://arxiv.org/abs/2312.03523).
+For more details of this library, see our EACL demo paper
+[Sig-Networks Toolkit: Signature Networks for Longitudinal Language Modelling](https://aclanthology.org/2024.eacl-demo.24/).
 
 For some quick examples without having to install anything on your personal
 machine, we have a few examples on [Deepnote](https://deepnote.com/) - you will
